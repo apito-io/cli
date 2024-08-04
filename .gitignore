@@ -2,3 +2,4 @@ apito_cli
 .idea
 .vscode
 node_modules
+*.cast

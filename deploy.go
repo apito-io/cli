@@ -2,94 +2,46 @@ package main
 
 import (
 	"archive/zip"
-	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
 	"github.com/spf13/cobra"
 )
 
 var deployCmd = &cobra.Command{
-	Use:   "deploy",
-	Short: "Deploy the project to a specified provider",
-	Long:  `Deploy the project to Docker, zip, AWS, or Google Cloud.`,
+	Use:       "deploy",
+	Short:     "Deploy the project to a specified provider",
+	Long:      `Deploy the project to Docker, zip, AWS, or Google Cloud.`,
+	ValidArgs: []string{"apito"},
+	Args:      cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
 	Run: func(cmd *cobra.Command, args []string) {
 		project, _ := cmd.Flags().GetString("project")
-		provider, _ := cmd.Flags().GetString("provider")
-		tag, _ := cmd.Flags().GetString("tag")
 
 		if project == "" {
 			fmt.Println("Error: --project is required")
 			return
 		}
-		if provider == "" {
-			fmt.Println("Error: --provider is required")
-			return
-		}
 
-		switch provider {
-		case "docker":
-			if err := deployDocker(project, tag); err != nil {
+		actionName := args[0]
+
+		switch actionName {
+		case "apito":
+			if err := deployApito(project); err != nil {
 				fmt.Println("Error deploying to Docker:", err)
-			}
-		case "zip":
-			if err := deployZip(project); err != nil {
-				fmt.Println("Error deploying as Zip:", err)
 			}
 		case "aws":
 			deployAWS(project)
 		case "google":
 			deployGoogle(project)
 		default:
-			fmt.Println("Invalid provider. Use 'docker', 'zip', 'aws', or 'google'.")
+			fmt.Println("Invalid provider. Use 'apito'")
 		}
 	},
 }
 
-func init() {
-	deployCmd.Flags().StringP("project", "p", "", "Project name")
-	deployCmd.Flags().StringP("provider", "", "", "Deployment provider (docker/zip/aws/google)")
-	deployCmd.Flags().StringP("tag", "", "", "Docker image tag (optional)")
-}
-
-func deployDocker(project, tag string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("error finding home directory: %w", err)
-	}
-	projectDir := filepath.Join(homeDir, ".apito", project)
-	if tag == "" {
-		tag = fmt.Sprintf("apito.io/project/%s", project)
-	}
-
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("error creating Docker client: %w", err)
-	}
-
-	tar, err := archive.TarWithOptions(projectDir, &archive.TarOptions{})
-	if err != nil {
-		return fmt.Errorf("error creating tar archive: %w", err)
-	}
-
-	imageBuildResponse, err := cli.ImageBuild(context.Background(), tar, types.ImageBuildOptions{
-		Tags: []string{tag},
-	})
-	if err != nil {
-		return fmt.Errorf("error building Docker image: %w", err)
-	}
-	defer imageBuildResponse.Body.Close()
-
-	fmt.Println("Docker image built successfully with tag:", tag)
-	return nil
-}
-
-func deployZip(project string) error {
+func deployApito(project string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("error finding home directory: %w", err)
