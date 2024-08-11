@@ -83,5 +83,5 @@ Deploy the project to a specified provider.
 ## Additional Information
 
 - The CLI saves configuration files in the ~/.apito directory, similar to how GitHub saves its configuration.
-- The create command will prompt for necessary details and save configuration in a .config file in the project directory.
+- The create command will prompt for necessary details and save configuration in a .env file in the project directory.
 - The deploy command will automatically detect the runtime environment and download the appropriate release asset from the Apito GitHub repository.

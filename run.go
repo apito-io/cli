@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/eiannone/keyboard"
-	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/eiannone/keyboard"
+	"github.com/spf13/cobra"
 )
 
 var runCmd = &cobra.Command{
@@ -72,10 +73,9 @@ func run(ctx context.Context, projectDir, projectName string) error {
 		return fmt.Errorf("failed to start the app: %w", err)
 	}
 
-	// Save the PID to the .config file
+	// Save the PID to the .env file
 	pid := cmd.Process.Pid
-	configFile := filepath.Join(projectDir, ".config")
-	err = updateConfig(configFile, "ENGINE_PID", strconv.Itoa(pid))
+	err = updateConfig(projectDir, "ENGINE_PID", strconv.Itoa(pid))
 	if err != nil {
 		return err
 	}

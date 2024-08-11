@@ -2,18 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/spf13/cobra"
 )
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the engine for the specified project",
-	Long:  `Stop the engine process based on the PID stored in ~/.apito/<project>/.config`,
+	Long:  `Stop the engine process based on the PID stored in ~/.apito/<project>/.env file`,
 	Run: func(cmd *cobra.Command, args []string) {
 		project, _ := cmd.Flags().GetString("project")
 		if project == "" {
@@ -31,9 +31,8 @@ func stopEngine(project string) {
 		return
 	}
 	projectDir := filepath.Join(homeDir, ".apito", project)
-	configFile := filepath.Join(projectDir, ".config")
 
-	envMap, err := godotenv.Read(configFile)
+	envMap, err := getConfig(projectDir)
 	if err != nil {
 		fmt.Println("Error reading config file:", err)
 		return
@@ -62,36 +61,12 @@ func stopEngine(project string) {
 		return
 	}
 
-	// Remove the PID from the .config file
-	err = updateConfig(configFile, "ENGINE_PID", "")
+	// Remove the PID from the .env file
+	err = updateConfig(projectDir, "ENGINE_PID", "")
 	if err != nil {
 		fmt.Println("Error updating config file:", err)
 		return
 	}
 
 	fmt.Println("Engine process stopped")
-}
-
-func updateConfig(configFile, key, value string) error {
-	envMap, err := godotenv.Read(configFile)
-	if err != nil {
-		return fmt.Errorf("error reading config file: %w", err)
-	}
-
-	envMap[key] = value
-
-	f, err := os.Create(configFile)
-	if err != nil {
-		return fmt.Errorf("error creating config file: %w", err)
-	}
-	defer f.Close()
-
-	for k, v := range envMap {
-		_, err := f.WriteString(fmt.Sprintf("%s=%s\n", k, v))
-		if err != nil {
-			return fmt.Errorf("error writing to config file: %w", err)
-		}
-	}
-
-	return nil
 }

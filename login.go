@@ -15,15 +15,28 @@ var loginCmd = &cobra.Command{
 	Short: "Login to Apito CLI",
 	Long:  `Login to Apito CLI using OAuth.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		startLoginServer()
+		project := ""
+		startLoginServer(project)
 	},
 }
 
-func startLoginServer() {
+func startLoginServer(project string) {
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Error finding home directory:", err)
+		return
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token != "" {
-			saveToken(token)
+			projectDir := filepath.Join(homeDir, ".apito", project)
+			err := updateConfig(projectDir, "TOKEN", token)
+			if err != nil {
+				fmt.Println("Error updating config:", err)
+				return
+			}
 			fmt.Fprintln(w, "Login successful. You can close this window.")
 		} else {
 			fmt.Fprintln(w, "Invalid login attempt.")
@@ -42,31 +55,4 @@ func startLoginServer() {
 	if err := exec.Command("open", loginURL).Start(); err != nil {
 		fmt.Println("Error opening browser:", err)
 	}
-}
-
-func saveToken(token string) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error finding home directory:", err)
-		return
-	}
-	configDir := filepath.Join(homeDir, ".apito")
-	configFile := filepath.Join(configDir, ".config")
-
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		fmt.Println("Error creating config directory:", err)
-		return
-	}
-
-	file, err := os.Create(configFile)
-	if err != nil {
-		fmt.Println("Error creating config file:", err)
-		return
-	}
-	defer file.Close()
-
-	if _, err := file.WriteString(token); err != nil {
-		fmt.Println("Error writing token to config file:", err)
-	}
-	fmt.Println("Token saved successfully.")
 }

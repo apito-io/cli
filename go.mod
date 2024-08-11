@@ -8,6 +8,7 @@ require (
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
 	github.com/joho/godotenv v1.5.1
+	github.com/kyokomi/emoji/v2 v2.2.13
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/spf13/cobra v1.8.1

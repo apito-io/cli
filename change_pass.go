@@ -3,10 +3,10 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/joho/godotenv"
 	"os"
 	"path/filepath"
+
+	"github.com/dgraph-io/badger/v3"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
@@ -30,7 +30,7 @@ var changePassCmd = &cobra.Command{
 			Mask:  '*',
 			Validate: func(input string) error {
 				if len(input) < 6 {
-					return fmt.Errorf("Password must be at least 6 characters")
+					return fmt.Errorf("password must be at least 6 characters")
 				}
 				return nil
 			},
@@ -47,7 +47,7 @@ var changePassCmd = &cobra.Command{
 			Mask:  '*',
 			Validate: func(input string) error {
 				if input != password {
-					return fmt.Errorf("Passwords do not match")
+					return fmt.Errorf("passwords do not match")
 				}
 				return nil
 			},
@@ -81,15 +81,14 @@ func changePassword(project, user, password string) error {
 	if err != nil {
 		return fmt.Errorf("error finding home directory: %w", err)
 	}
-	configFile := filepath.Join(homeDir, ".apito", project, ".config")
 
 	// Load the config file
-	envMap, err := godotenv.Read(configFile)
+	envMap, err := getConfig(homeDir)
 	if err != nil {
-		return fmt.Errorf("error reading config file: %w", err)
+		return fmt.Errorf("error loading config: %w", err)
 	}
 
-	dbEngine := envMap["DB_ENGINE"]
+	dbEngine := envMap["SYSTEM_DB_ENGINE"]
 	adminUser := envMap["ADMIN_USER"]
 
 	switch dbEngine {
@@ -104,7 +103,7 @@ func changePassword(project, user, password string) error {
 			envMap["DB_USER"], envMap["DB_PASS"], envMap["DB_HOST"], envMap["DB_PORT"], envMap["DB_NAME"])
 		err = changePasswordSQL("mysql", connStr, adminUser, password)
 	default:
-		err = fmt.Errorf("unsupported DB_ENGINE: %s", dbEngine)
+		err = fmt.Errorf("unsupported SYSTEM_DB_ENGINE: %s", dbEngine)
 	}
 
 	if err != nil {
