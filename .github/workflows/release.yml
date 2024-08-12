@@ -10,15 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [linux-latest, linux-arm-latest, macos-latest, macos-arm-latest]
         include:
-          - os: ubuntu-latest
+          - os: linux-latest
             goos: linux
             goarch: amd64
+            ext: ""
+          - os: linux-arm-latest
+            goos: linux
+            goarch: arm64
             ext: ""
           - os: macos-latest
             goos: darwin
             goarch: amd64
+            ext: ""
+          - os: macos-arm-latest
+            goos: darwin
+            goarch: arm64
             ext: ""
           # - os: windows-latest
           #   goos: windows
@@ -49,13 +57,14 @@ jobs:
         with:
           name: apito-${{ matrix.goos }}-${{ matrix.goarch }}
           path: apito-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+
   release:
     needs: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
         os: [linux, darwin]
-        goarch: [amd64]
+        goarch: [amd64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -70,7 +79,9 @@ jobs:
         with:
           files: |
             apito-linux-amd64.zip
+            apito-linux-arm64.zip
             apito-darwin-amd64.zip
+            apito-darwin-arm64.zip
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ github.ref_name }}"
           body: "This is an automatic release for version ${{ github.ref_name }}."
