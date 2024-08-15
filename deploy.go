@@ -7,94 +7,61 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
 var deployCmd = &cobra.Command{
 	Use:       "deploy",
-	Short:     "Deploy the project to a specified provider",
-	Long:      `Deploy the project to Docker, zip, AWS, or Google Cloud.`,
-	ValidArgs: []string{"apito"},
+	Short:     "Deploy A Project to Apito Cloud",
+	Long:      `Deploy your localhost project to Apito Cloud, AWS, or Google Cloud.`,
 	Args:      cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
 	Run: func(cmd *cobra.Command, args []string) {
-		project, _ := cmd.Flags().GetString("project")
-
-		if project == "" {
-			fmt.Println("Error: --project is required")
+		
+		projectName, _ := cmd.Flags().GetString("name")
+		if projectName == "" {
+			fmt.Println("Error: project name is required")
 			return
 		}
 
-		actionName := args[0]
-
-		switch actionName {
-		case "apito":
-			if err := deployApito(project); err != nil {
-				fmt.Println("Error deploying to Docker:", err)
-			}
-		case "aws":
-			deployAWS(project)
-		case "google":
-			deployGoogle(project)
-		default:
-			fmt.Println("Invalid provider. Use 'apito'")
+		if err := deployApito(projectName); err != nil {
+			fmt.Println("Error deploying to Docker:", err)
 		}
+		
 	},
 }
 
 func deployApito(project string) error {
+	
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("error finding home directory: %w", err)
+		fmt.Println("Error finding home directory:", err)
+		return
 	}
 	projectDir := filepath.Join(homeDir, ".apito", project)
-	zipFile := filepath.Join(homeDir, ".apito", fmt.Sprintf("%s.zip", project))
 
-	zipf, err := os.Create(zipFile)
-	if err != nil {
-		return fmt.Errorf("error creating zip file: %w", err)
-	}
-	defer zipf.Close()
 
-	zipWriter := zip.NewWriter(zipf)
-	defer zipWriter.Close()
-
-	err = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, err := filepath.Rel(projectDir, path)
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			_, err := zipWriter.Create(relPath + "/")
-			return err
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		w, err := zipWriter.Create(relPath)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, file)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("error creating zip archive: %w", err)
+	fmt.Println(Blue + fmt.Sprintf(`To Deploy your local project to Apito Cloud, You need a deploy token.`) + Reset)
+	fmt.Println(Blue + `Go to https://app.apito.io and login. You will find the deploy token in the Console Space` + Reset)
+	// Prompt for project description
+	prompt := promptui.Prompt{
+		Label: "Enter Apito Deploy Token",
 	}
 
-	fmt.Println("Project zipped successfully:", zipFile)
+	deployToken, err := prompt.Run()
+	if err != nil {
+		fmt.Println("Prompt failed:", err)
+		return nil
+	}
+
+	config, err := getConfig(projectDir)
+	if err != nil {
+		fmt.Println("Error reading config file:", err)
+	}
+
+	config["DEPLOY_TOKEN"] = deployToken
+	
+
+
 	return nil
-}
-
-func deployAWS(project string) {
-	fmt.Println("Deploying to AWS not implemented yet.")
-}
-
-func deployGoogle(project string) {
-	fmt.Println("Deploying to Google Cloud not implemented yet.")
 }

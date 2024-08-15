@@ -5,21 +5,38 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	listCmd.Flags().StringP("function", "f", "", "Adds a function for that project")
+}
+
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List projects, functions, or models",
-	Long:  `List projects, functions, or models in the Apito CLI.`,
+	Short: "List projects, functions",
+	Long:  `List projects, functions in the Apito CLI.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		project, _ := cmd.Flags().GetString("project")
-		if project == "" {
-			listProjects()
-		} else {
-			listFunctions(project)
+
+		actionName := args[0] // take only one and should be one
+
+		projectName, _ := cmd.Flags().GetString("name")
+		if projectName == "" {
+			fmt.Println("Error: project name is required")
+			return
 		}
+
+		projectName = strings.TrimSpace(projectName)
+
+		switch actionName {
+		case "function":
+			listFunctions(projectName)
+		default:
+			listProjects()
+		}
+	
 	},
 }
 

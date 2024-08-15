@@ -2,6 +2,13 @@
 
 Apito CLI is a command-line tool to manage projects, functions, and more for the Apito platform.
 
+## Installation
+
+To install apito cli run the following command ( Linux & MacOS )
+```sh
+curl -sSL https://get.apito.io/cli/install.sh | sh
+```
+
 ## Commands
 
 ### `create`
@@ -10,21 +17,14 @@ Create a new project, function, or model.
 
 - **Usage:**
   ```sh
-  apito create --project <projectName>
-  apito create --project <projectName> --name <functionName> [--function]
-  apito create --project <projectName> --name <modelName> [--model]
+  apito create project -n <projectName>
 
 - **Options**:
-    - `--project, -p` : The project name (required).
     - `--name, -n` : The name for the function or model (optional).
-    - `--function` : Specify if creating a function (optional).
-    - `--model` : Specify if creating a model (optional).
 
 - **Examples**:
     ```sh
-    apito create --project myApp
-    apito create --project myApp --name createInvoice --function
-    apito create --project myApp --name testModel --model
+    apito create project -n myApp
 
 ### `list`
 
@@ -40,15 +40,40 @@ List projects or functions.
 - **Examples**:
     ```sh
     apito list
-    apito list --project myApp
+    apito list --project myApp -f
 
-### `login`
-Login to Apito CLI using OAuth.
+### `deploy`
+Deploy the project to Apito Cloud
 
 - **Usage:**
   ```sh
-  apito login
+  apito deploy --project <projectName> 
   
+- **Options**:
+    - `--project, -p` : The project name (required).
+    - `--cloud, -c` : Support for Other Cloud is Coming Soon.
+
+- **Examples**:
+    ```sh
+    apito deploy --project myApp
+
+### `pack`
+Deploy the project to a specified provider.
+
+- **Usage:**
+  ```sh
+  apito pack --project <projectName> --provider <provider> [--tag <dockerTag>]
+  
+- **Options**:
+    - `--project, -p` : The project name (required).
+    - `--provider` : The deployment provider (docker/zip) (required).
+    - `--tag` : Docker image tag (optional, for Docker provider).
+
+- **Examples**:
+    ```sh
+    apito pack --project myApp --provider docker
+    apito pack --project myApp --provider docker --tag customTag
+    apito pack --project myApp --provider zip
 
 ### `change-pass`
 Change the password for a user.
@@ -61,24 +86,6 @@ Change the password for a user.
 - **Examples**: 
     ```sh
     apito change-pass --project myApp --user admin
-
-### `deploy`
-Deploy the project to a specified provider.
-
-- **Usage:**
-  ```sh
-  apito deploy --project <projectName> --provider <provider> [--tag <dockerTag>]
-  
-- **Options**:
-    - `--project, -p` : The project name (required).
-    - `--provider` : The deployment provider (docker/zip/aws/google) (required).
-    - `--tag` : Docker image tag (optional, for Docker provider).
-
-- **Examples**:
-    ```sh
-    apito deploy --project myApp --provider docker
-    apito deploy --project myApp --provider docker --tag customTag
-    apito deploy --project myApp --provider zip
 
 ## Additional Information
 

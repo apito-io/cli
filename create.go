@@ -15,11 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	createCmd.Flags().StringP("function", "f", "", "Adds a function for that project")
-	createCmd.Flags().StringP("model", "m", "", "Creates a model in the project")
-	createCmd.Flags().StringP("name", "n", "", "Name of the function or model or project")
-}
 
 var createCmd = &cobra.Command{
 	Use:       "create",
