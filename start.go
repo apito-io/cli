@@ -17,7 +17,6 @@ import (
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/eiannone/keyboard"
 	"github.com/manifoldco/promptui"
-	"github.com/mholt/archiver/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -284,7 +283,7 @@ Loop:
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := archiver.Unarchive(resp.Filename, tmpDir); err != nil {
+	if _, err := extractArchiveToTemp(resp.Filename); err != nil {
 		return fmt.Errorf("error extracting file: %w", err)
 	}
 
@@ -441,7 +440,7 @@ Loop:
 
 	// Extract to console directory
 	consoleDir := filepath.Join(homeDir, ".apito", "console")
-	if err := archiver.Unarchive(resp.Filename, consoleDir); err != nil {
+	if _, err := extractArchiveToTemp(resp.Filename); err != nil {
 		return fmt.Errorf("error extracting console: %w", err)
 	}
 
@@ -543,7 +542,7 @@ func downloadAndInstallCaddy(releaseTag string) (string, error) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := archiver.Unarchive(resp.Filename, tmpDir); err != nil {
+	if _, err := extractArchiveToTemp(resp.Filename); err != nil {
 		return "", fmt.Errorf("error extracting Caddy: %w", err)
 	}
 

@@ -27,9 +27,7 @@ func main() {
 	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(restartCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(listCmd)
-	rootCmd.AddCommand(loginCmd)
-	rootCmd.AddCommand(changePassCmd)
+    // pruned commands: list, login, change-pass
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

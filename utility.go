@@ -10,9 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"archive/zip"
+	"compress/gzip"
+	"io"
+	"os/exec"
+
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/joho/godotenv"
-	"github.com/mholt/archiver/v3"
 )
 
 const ConfigFile = ".env"
@@ -185,11 +189,92 @@ func extractArchiveToTemp(archivePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error creating temp dir: %w", err)
 	}
-	if err := archiver.Unarchive(archivePath, tmpDir); err != nil {
+	// Detect extension
+	if strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
+		zr, err := zip.OpenReader(archivePath)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("open zip: %w", err)
+		}
+		defer zr.Close()
+		for _, f := range zr.File {
+			fp := filepath.Join(tmpDir, f.Name)
+			if f.FileInfo().IsDir() {
+				if err := os.MkdirAll(fp, 0755); err != nil {
+					os.RemoveAll(tmpDir)
+					return "", err
+				}
+				continue
+			}
+			if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
+				os.RemoveAll(tmpDir)
+				return "", err
+			}
+			rc, err := f.Open()
+			if err != nil {
+				os.RemoveAll(tmpDir)
+				return "", err
+			}
+			out, err := os.Create(fp)
+			if err != nil {
+				rc.Close()
+				os.RemoveAll(tmpDir)
+				return "", err
+			}
+			if _, err := io.Copy(out, rc); err != nil {
+				out.Close()
+				rc.Close()
+				os.RemoveAll(tmpDir)
+				return "", err
+			}
+			out.Close()
+			rc.Close()
+		}
+	} else if strings.HasSuffix(strings.ToLower(archivePath), ".tar.gz") || strings.HasSuffix(strings.ToLower(archivePath), ".tgz") {
+		f, err := os.Open(archivePath)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", err
+		}
+		defer f.Close()
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", err
+		}
+		defer gz.Close()
+		// Use tar utility if available to keep implementation small
+		// Write to tmp file then use system tar
+		tmpTar := filepath.Join(tmpDir, "archive.tar")
+		tf, err := os.Create(tmpTar)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", err
+		}
+		if _, err := io.Copy(tf, gz); err != nil {
+			tf.Close()
+			os.RemoveAll(tmpDir)
+			return "", err
+		}
+		tf.Close()
+		// Extract with tar -xf
+		if err := execCommand("tar", "-xf", tmpTar, "-C", tmpDir); err != nil {
+			os.RemoveAll(tmpDir)
+			return "", err
+		}
+		_ = os.Remove(tmpTar)
+	} else {
 		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("error extracting: %w", err)
+		return "", fmt.Errorf("unsupported archive format: %s", archivePath)
 	}
 	return tmpDir, nil
+}
+
+func execCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // findBinaryInDir recursively finds a binary by name within root and returns full path.
