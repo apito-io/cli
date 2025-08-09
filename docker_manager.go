@@ -147,25 +147,30 @@ func writeComposeFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	apitoDir := filepath.Join(homeDir, ".apito")
-	if err := os.MkdirAll(apitoDir, 0755); err != nil {
+    apitoDir := filepath.Join(homeDir, ".apito")
+    if err := os.MkdirAll(apitoDir, 0755); err != nil {
 		return "", err
 	}
-	engineDataDir := filepath.Join(apitoDir, "engine-data")
-	if err := os.MkdirAll(engineDataDir, 0755); err != nil {
+    engineDataDir := filepath.Join(apitoDir, "engine-data")
+    if err := os.MkdirAll(engineDataDir, 0777); err != nil {
 		return "", err
 	}
+    _ = os.Chmod(engineDataDir, 0777)
 
 	// Mount .env from ~/.apito/bin/.env into container workdir .env
-	envDir := filepath.Join(apitoDir, "bin")
-	_ = os.MkdirAll(envDir, 0755)
-	envFile := filepath.Join(envDir, ".env")
+    envDir := filepath.Join(apitoDir, "bin")
+    _ = os.MkdirAll(envDir, 0755)
+    envFile := filepath.Join(envDir, ".env")
+    if _, err := os.Stat(envFile); os.IsNotExist(err) {
+        _ = os.WriteFile(envFile, []byte(""), 0644)
+    }
 
 	content := "" +
 		"services:\n" +
-		"  engine:\n" +
+        "  engine:\n" +
 		"    image: ghcr.io/apito-io/engine:latest\n" +
 		"    container_name: apito-engine\n" +
+        "    working_dir: /go/src/gitlab.com/apito.io/engine\n" +
 		"    ports:\n" +
 		"      - \"5050:5050\"\n" +
 		"    volumes:\n" +
