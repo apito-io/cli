@@ -114,12 +114,6 @@ This command will (based on run mode stored in `~/.apito/config.yml`):
   - Check and free ports 5050/4000 if needed
   - Start engine and serve console locally (managed by PID + logs)
 
-### 3. Deploy to Apito Cloud
-
-```bash
-apito deploy -p my-awesome-app
-```
-
 ## 📚 Command Reference
 
 ### 🔧 **System Management**
@@ -239,45 +233,7 @@ apito create project -p my-ecommerce-app
 apito create project -n my-ecommerce-app
 ```
 
-**SYNC_TOKEN Setup:**
-
-The first time you create a project, you'll need to provide a SYNC_TOKEN:
-
-1. Go to http://localhost:4000
-2. Navigate to Cloud Sync option
-3. Copy the generated token
-4. Paste it when prompted by the CLI
-
-The token is automatically saved and reused for future requests.
-
-#### `list` - List Resources
-
-Lists projects or functions.
-
-**Usage:**
-
-```bash
-apito list [resource] [-p <project>]
-```
-
-**Resources:**
-
-- `function` - List functions in a project
-- (no resource) - List all projects
-
-**Options:**
-
-- `--project, -p` - Project name (required for listing functions)
-
-**Examples:**
-
-```bash
-# List all projects
-apito list
-
-# List functions in a specific project
-apito list function -p my-ecommerce-app
-```
+<!-- Cloud Sync and list commands were removed in the new workflow. -->
 
 ### 🚀 **Development & Execution**
 
@@ -425,144 +381,34 @@ apito build docker -p my-ecommerce-app -t v1.0.0
 apito build zip -p my-ecommerce-app
 ```
 
-### ☁️ **Deployment**
-
-#### `deploy` - Deploy to Apito Cloud
-
-Deploys your project to Apito Cloud platform.
-
-**Usage:**
-
-```bash
-apito deploy -p <project>
-```
-
-**Options:**
-
-- `--project, -p` - Project name (required)
-
-**Examples:**
-
-```bash
-apito deploy -p my-ecommerce-app
-```
-
-**Features:**
-
-- Interactive deployment token setup
-- Automatic cloud configuration
-- Real-time deployment status
-
-#### `pack` - Package for Deployment
-
-Packages your project for various deployment providers.
-
-**Usage:**
-
-```bash
-apito pack <provider> -p <project> [options]
-```
-
-**Providers:**
-
-- `apito` - Package for Apito Cloud
-- `aws` - Package for AWS (coming soon)
-- `google` - Package for Google Cloud (coming soon)
-
-**Options:**
-
-- `--project, -p` - Project name (required)
-- `--tag` - Docker image tag (optional)
-
-**Examples:**
-
-```bash
-# Package for Apito Cloud
-apito pack apito -p my-ecommerce-app
-
-# Package for AWS (when available)
-apito pack aws -p my-ecommerce-app
-```
+<!-- Deployment-related commands (deploy/pack) were removed. -->
 
 ### 🔄 **Updates & Maintenance**
 
 #### `update` - Update Components
 
-Updates Apito engine or console to the latest version.
+Update Apito engine, console, or the CLI itself.
 
 **Usage:**
 
 ```bash
-apito update <component> -p <project> [options]
+apito update <engine|console|self> [-v <version>]
 ```
-
-**Components:**
-
-- `engine` - Update the Apito engine
-- `console` - Update the console interface
-
-**Options:**
-
-- `--project, -p` - Project name (required)
-- `--version, -v` - Specific version to update to (optional)
 
 **Examples:**
 
 ```bash
 # Update engine to latest version
-apito update engine -p my-ecommerce-app
+apito update engine
 
-# Update to specific version
-apito update engine -p my-ecommerce-app -v v1.2.3
+# Update console to a specific version
+apito update console -v v1.2.3
 
-# Update console
-apito update console -p my-ecommerce-app
+# Update the CLI itself to the latest version
+apito update self
 ```
 
-### 🔐 **Authentication & Security**
-
-#### `login` - Authenticate with Apito
-
-Logs in to your Apito account using OAuth.
-
-**Usage:**
-
-```bash
-apito login
-```
-
-**Features:**
-
-- OAuth-based authentication
-- Automatic browser opening
-- Token management
-
-#### `change-pass` - Change User Password
-
-Changes the password for a user in your project.
-
-**Usage:**
-
-```bash
-apito change-pass -p <project> -u <user>
-```
-
-**Options:**
-
-- `--project, -p` - Project name (required)
-- `--user, -u` - Username (required)
-
-**Examples:**
-
-```bash
-apito change-pass -p my-ecommerce-app -u admin
-```
-
-**Features:**
-
-- Secure password input with masking
-- Password confirmation
-- Minimum password length validation (6 characters)
+<!-- Authentication commands (login/change-pass) were removed. -->
 
 ## 🗂️ Project Structure
 
