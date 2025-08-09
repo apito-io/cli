@@ -169,7 +169,7 @@ main() {
     echo
     
     # Construct download URL
-    local binary_url="https://github.com/apito-io/cli/releases/download/$latest_tag/apito-$os-$arch.zip"
+    local binary_url="https://github.com/apito-io/cli/releases/download/$latest_tag/apito_${latest_tag#v}_${os}_${arch}.tar.gz"
     print_status "Download URL: $binary_url"
     echo
     
@@ -186,10 +186,10 @@ main() {
     
     # Download binary
     print_step "⬇️  Downloading Apito CLI..."
-    local zip_file="$temp_dir/apito.zip"
-    download_with_progress "$binary_url" "$zip_file"
-    
-    if [ ! -f "$zip_file" ]; then
+    local archive_file="$temp_dir/apito.tgz"
+    download_with_progress "$binary_url" "$archive_file"
+
+    if [ ! -f "$archive_file" ]; then
         print_error "Download failed!"
         rm -rf "$temp_dir"
         exit 1
@@ -200,7 +200,7 @@ main() {
     
     # Extract binary
     print_step "📂 Extracting binary..."
-    extract_archive "$zip_file" "$temp_dir"
+    extract_archive "$archive_file" "$temp_dir"
     
     local binary_path="$temp_dir/apito"
     if [ ! -f "$binary_path" ]; then

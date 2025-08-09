@@ -28,7 +28,6 @@ func main() {
 	rootCmd.AddCommand(restartCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(listCmd)
-	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(changePassCmd)
 

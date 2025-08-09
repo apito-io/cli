@@ -1,18 +1,15 @@
 package main
 
 import (
-	"archive/zip"
-	"context"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
+    "archive/zip"
+    "fmt"
+    "io"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "strings"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
-	"github.com/spf13/cobra"
+    "github.com/spf13/cobra"
 )
 
 func init() {
@@ -61,28 +58,18 @@ func deployDocker(project, tag string) error {
 		tag = fmt.Sprintf("apito.io/project/%s", project)
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("error creating Docker client: %w", err)
-	}
-
-	tar, err := archive.TarWithOptions(projectDir, &archive.TarOptions{})
-	if err != nil {
-		return fmt.Errorf("error creating tar archive: %w", err)
-	}
-
-	imageName := strings.ToLower(project)
-
-	imageBuildResponse, err := cli.ImageBuild(context.Background(), tar, types.ImageBuildOptions{
-		//Dockerfile: filepath.Join(projectDir, "Dockerfile"),
-		Tags: []string{fmt.Sprintf(`apito.io/projects/%s`, imageName)},
-	})
-	if err != nil {
-		return fmt.Errorf("error building Docker image: %w", err)
-	}
-	defer imageBuildResponse.Body.Close()
-
-	fmt.Println("Docker image built successfully with tag:", tag)
+    imageName := strings.ToLower(project)
+    if tag == "" {
+        tag = fmt.Sprintf("apito.io/projects/%s", imageName)
+    }
+    // Build using docker CLI to avoid SDK import/versioning issues
+    cmd := exec.Command("docker", "build", "-t", tag, projectDir)
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("error building Docker image: %w", err)
+    }
+    fmt.Println("Docker image built successfully with tag:", tag)
 	return nil
 }
 

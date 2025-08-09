@@ -27,8 +27,14 @@
   </a>
 </p>
 
-
 ## 📦 Installation
+
+### Homebrew (macOS and Linux)
+
+```bash
+brew tap apito-io/tap
+brew install apito-cli
+```
 
 ### Quick Install (Linux & macOS)
 
