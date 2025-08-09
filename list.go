@@ -36,7 +36,7 @@ var listCmd = &cobra.Command{
 		default:
 			listProjects()
 		}
-	
+
 	},
 }
 

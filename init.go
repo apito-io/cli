@@ -61,6 +61,45 @@ func initializeSystem() {
 	print_success("System configuration ready")
 	fmt.Println()
 
+	// Step 2.5: Optional database setup (Docker mode only)
+	if mode == "docker" {
+		print_status("Step 2.5: Database setup (optional)...")
+		prompt := promptui.Select{
+			Label: "Do you want to spin up a local database now?",
+			Items: []string{"Postgres", "MySQL", "MariaDB", "SQLServer", "MongoDB", "Skip (I already have a database)"},
+		}
+		_, choice, err := prompt.Run()
+		if err == nil && choice != "Skip (I already have a database)" {
+			var engine string
+			switch choice {
+			case "Postgres":
+				engine = "postgres"
+			case "MySQL":
+				engine = "mysql"
+			case "MariaDB":
+				engine = "mariadb"
+			case "SQLServer":
+				engine = "sqlserver"
+			case "MongoDB":
+				engine = "mongodb"
+			}
+			if engine != "" {
+				if err := ensureDockerAvailable(); err != nil {
+					print_error("Docker not available: " + err.Error())
+				} else if path, err := writeDBComposeFile(engine); err != nil {
+					print_error("Failed to prepare DB compose: " + err.Error())
+				} else if err := dockerComposeUpFile(path); err != nil {
+					print_error("Failed to start database: " + err.Error())
+				} else {
+					print_success("Database started via Docker: " + engine)
+				}
+			}
+		} else {
+			print_status("Skipping database setup")
+		}
+		fmt.Println()
+	}
+
 	// Step 3: Validate system database configuration
 	print_status("Step 3: Validating system database configuration...")
 	if err := validateSystemDatabase(); err != nil {

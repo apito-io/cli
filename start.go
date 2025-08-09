@@ -21,13 +21,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var startWithDB bool
+
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the Apito engine and console",
-	Long:  `Start the Apito engine and console with automatic setup and downloads.`,
+	Long:  `Start the Apito engine and console with automatic setup and downloads. Optionally start a database in Docker mode.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// If --db specified, run database helper first
+		if startWithDB {
+			startDatabaseInteractive()
+		}
 		startApito()
 	},
+}
+
+func init() {
+	startCmd.Flags().BoolVar(&startWithDB, "db", false, "Start a database via Docker before services (Docker mode only)")
 }
 
 func startApito() {

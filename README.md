@@ -1,6 +1,32 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/apito-io/engine/main/docs/cover-photo.png" alt="Apito Logo" />
+</p>
+
 # Apito CLI
 
 🚀 **Apito CLI** is a powerful command-line tool for managing projects, functions, and deployments on the Apito platform. It provides a seamless development experience from local development to cloud deployment.
+
+<p align="center">
+  <a href="https://apito.io"><strong>Website</strong></a> ·
+  <a href="https://docs.apito.io"><strong>Documentation</strong></a> ·
+  <a href="https://discord.com/invite/fwHgF8pUpt"><strong>Discord</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/apito-io/engine/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
+  </a>
+  <a href="https://github.com/apito-io/engine/releases">
+    <img src="https://img.shields.io/github/v/release/apito-io/cli" alt="Release" />
+  </a>
+  <a href="https://goreportcard.com/report/github.com/apito-io/cli">
+    <img src="https://goreportcard.com/badge/github.com/apito-io/cli" alt="Go Report Card" />
+  </a>
+  <a href="https://github.com/apito-io/engine/actions">
+    <img src="https://github.com/apito-io/engine/workflows/Build%20and%20Release/badge.svg" alt="Build Status" />
+  </a>
+</p>
+
 
 ## 📦 Installation
 
@@ -39,10 +65,14 @@ apito init
 
 This command will:
 
-- Create the `~/.apito` directory if it doesn't exist
+- Create core directories under `~/.apito` (e.g., `bin/`, `engine-data/`, `logs/`, `run/`)
 - Create `~/.apito/bin/.env` with default system configuration
+- Ask you to choose a run mode: Docker (recommended, default) or Manual, and save it to `~/.apito/config.yml`
+- If Docker is selected:
+  - Generate `~/.apito/docker-compose.yml` (engine + console)
+  - Optionally spin up a database via `~/.apito/db-compose.yml` (Postgres/MySQL/MariaDB/SQLServer/MongoDB), or skip if you already have one
 - Validate database and environment settings
-- Check port availability (5050, 4000) and optionally free them
+- Check port availability (5050, 4000) and optionally free them (Manual mode only)
 - Guide you through any missing configuration
 
 ### 1. Create Your First Project
@@ -61,17 +91,22 @@ This interactive command will:
 ### 2. Start Apito Engine and Console
 
 ```bash
-apito start
+apito start [--db]
 ```
 
-This command will:
+This command will (based on run mode stored in `~/.apito/config.yml`):
 
-- Download the latest Apito engine from [GitHub releases](https://github.com/apito-io/engine/releases) to `~/.apito/bin/engine`
-- Download the latest console from [GitHub releases](https://github.com/apito-io/console/releases) to `~/.apito/console`
-- Install and configure Caddy web server to `~/.apito/bin/caddy`
-- Start the engine on port 5050
-- Serve the console on port 4000
-- Manage processes with PID files and logs
+- Docker mode (default, recommended):
+  - Ensure `~/.apito/docker-compose.yml` exists (engine + console)
+  - Mount `~/.apito/engine-data -> /go/src/gitlab.com/apito.io/engine/db` and `~/.apito/bin/.env -> /go/src/gitlab.com/apito.io/engine/.env`
+  - Start services via `docker compose -f ~/.apito/docker-compose.yml up -d`
+  - Optional: `--db` prompts you to select and start a database using `~/.apito/db-compose.yml`
+- Manual mode:
+  - Download the latest Apito engine to `~/.apito/bin/engine`
+  - Download the latest console to `~/.apito/console`
+  - Install and configure Caddy to `~/.apito/bin/caddy`
+  - Check and free ports 5050/4000 if needed
+  - Start engine and serve console locally (managed by PID + logs)
 
 ### 3. Deploy to Apito Cloud
 
@@ -247,32 +282,32 @@ Starts the Apito engine and console with automatic setup and downloads.
 **Usage:**
 
 ```bash
-apito start
+apito start [--db]
 ```
 
 **Options:**
 
-- (none)
+- `--db` - Prompt to start a database in Docker mode before services
 
 **Features:**
 
-- **Automatic Setup**: Downloads and installs all required components
-- **Port Management**: Checks port availability (5050, 4000)
-- **Engine Management**: Downloads latest engine from [GitHub releases](https://github.com/apito-io/engine/releases)
-- **Console Management**: Downloads latest console from [GitHub releases](https://github.com/apito-io/console/releases)
-- **Caddy Integration**: Automatically installs and configures [Caddy server](https://github.com/caddyserver/caddy/releases)
-- **Process Management**: Tracks running processes and prevents duplicates
+- **Run Modes**: Docker (default) or Manual, stored in `~/.apito/config.yml`
+- **Docker Mode**: Uses compose with persistent volumes and `.env` mounted inside the engine container
+- **Manual Mode**: Downloads binaries, installs Caddy, and manages processes with PID/log files
+- **Port Management**: Checks 5050/4000 (Manual mode only)
 - **Graceful Shutdown**: Stops all services on Ctrl+C
 
 **What it does:**
 
-1. **Port Check**: Verifies ports 5050 and 4000 are available
-2. **Engine Download**: Downloads latest engine binary for your system architecture
-3. **Process Check**: Ensures engine isn't already running
-4. **Console Download**: Downloads latest console static files
-5. **Caddy Installation**: Installs Caddy web server if not present
-6. **Service Startup**: Starts engine and serves console with Caddy
-7. **Monitoring**: Waits for interrupt signal to stop services
+1. Loads run mode from `~/.apito/config.yml` (defaults to Docker)
+2. Docker mode:
+   - Compose up engine and console with required volumes
+   - Optional `--db` to bring up a local database compose
+3. Manual mode:
+   - Port check and optional freeing
+   - Download engine/console, install Caddy
+   - Start engine and serve console
+4. Waits for interrupt to stop services
 
 **Examples:**
 
@@ -530,17 +565,21 @@ Apito CLI sets up the following structure:
 ```
 ~/.apito/
 ├── bin/
-│   ├── engine               # Engine binary
-│   ├── caddy                # Caddy binary
-│   └── .env                 # System configuration
-├── console/                 # Console static files
-├── Caddyfile                # Console server config
+│   ├── engine               # Engine binary (Manual mode)
+│   ├── caddy                # Caddy binary (Manual mode)
+│   └── .env                 # System configuration mounted into engine container
+├── engine-data/             # Persistent engine data volume (Docker mode)
+├── docker-compose.yml       # Engine + Console compose (Docker mode)
+├── db-compose.yml           # Optional database compose (Docker mode)
+├── console/                 # Console static files (Manual mode)
+├── Caddyfile                # Console server config (Manual mode)
 ├── logs/
 │   ├── engine.log
 │   └── console.log
-└── run/
-    ├── engine.pid
-    └── console.pid
+├── run/
+│   ├── engine.pid
+│   └── console.pid
+└── config.yml               # CLI config (e.g., mode: docker|manual)
 ```
 
 ## ⚙️ Configuration
