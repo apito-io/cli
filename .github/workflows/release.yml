@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 jobs:
   build:
@@ -39,18 +39,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-            go-version: 1.22.5
+          go-version: 1.22.5
 
       - name: Install dependencies
         run: go mod tidy
 
       - name: Build static binary
         run: |
-            CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o apito${{ matrix.ext }} -ldflags "-w -s"
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o apito${{ matrix.ext }} -ldflags "-w -s"
 
       - name: Zip binary
         run: |
-            zip apito-${{ matrix.goos }}-${{ matrix.goarch }}.zip apito${{ matrix.ext }}
+          zip apito-${{ matrix.goos }}-${{ matrix.goarch }}.zip apito${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -89,3 +89,26 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  goreleaser:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}

@@ -7,13 +7,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "apito",
 		Short: "Apito CLI",
-		Args:  cobra.MinimumNArgs(1),
 		Long:  `Apito CLI to manage projects, functions, and more.`,
 	}
+	rootCmd.Version = version
 	var project string
 	rootCmd.PersistentFlags().StringVarP(&project, "project", "p", "", "ver")
 

@@ -1,0 +1,61 @@
+project_name: apito
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: apito
+    main: .
+    binary: apito
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Tag}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: archive
+    builds:
+      - apito
+    name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    format: tar.gz
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: apito-cli
+    tap:
+      owner: apito-io
+      name: homebrew-tap
+    commit_author:
+      name: apito-bot
+      email: bot@apito.io
+    folder: Formula
+    homepage: "https://apito.io"
+    description: "Apito CLI"
+    license: Apache-2.0
+    test: |
+      system "#{bin}/apito", "--version"
+    install: |
+      bin.install "apito"
+
+release:
+  github:
+    owner: apito-io
+    name: cli
+  draft: false
+  prerelease: false
+
+changelog:
+  sort: asc
+  use: git
