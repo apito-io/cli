@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -16,11 +17,14 @@ func main() {
 	var project string
 	rootCmd.PersistentFlags().StringVarP(&project, "project", "p", "", "ver")
 
+	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(restartCmd)
+	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(loginCmd)

@@ -1,94 +1,628 @@
 # Apito CLI
 
-Apito CLI is a command-line tool to manage projects, functions, and more for the Apito platform.
+🚀 **Apito CLI** is a powerful command-line tool for managing projects, functions, and deployments on the Apito platform. It provides a seamless development experience from local development to cloud deployment.
 
-## Installation
+## 📦 Installation
 
-To install apito cli run the following command ( Linux & MacOS )
-```sh
-curl -sSL https://get.apito.io/cli/install.sh | sh
+### Quick Install (Linux & macOS)
+
+```bash
+curl -fsSL https://get.apito.io/install.sh | bash
 ```
 
-## Commands
+### Manual Install
 
-### `create`
+```bash
+# Download the installer
+wget -O install.sh https://get.apito.io/install.sh
 
-Create a new project, function, or model.
+# Make it executable
+chmod +x install.sh
 
-- **Usage:**
-  ```sh
-  apito create project -n <projectName>
+# Run the installer
+./install.sh
+```
 
-- **Options**:
-    - `--name, -n` : The name for the function or model (optional).
+### Verify Installation
 
-- **Examples**:
-    ```sh
-    apito create project -n myApp
+```bash
+apito --version
+```
 
-### `list`
+## 🎯 Getting Started
 
-List projects or functions.
+### 0. Initialize Apito CLI (First Time Setup)
 
-- **Usage:**
-  ```sh
-  apito list [--project <projectName>]
+```bash
+apito init
+```
 
-- **Options**:
-    - `--project, -p` : The project name (optional).
+This command will:
 
-- **Examples**:
-    ```sh
-    apito list
-    apito list --project myApp -f
+- Create the `~/.apito` directory if it doesn't exist
+- Create `~/.apito/bin/.env` with default system configuration
+- Validate database and environment settings
+- Check port availability (5050, 4000) and optionally free them
+- Guide you through any missing configuration
 
-### `deploy`
-Deploy the project to Apito Cloud
+### 1. Create Your First Project
 
-- **Usage:**
-  ```sh
-  apito deploy --project <projectName> 
-  
-- **Options**:
-    - `--project, -p` : The project name (required).
-    - `--cloud, -c` : Support for Other Cloud is Coming Soon.
+```bash
+apito create project -n my-awesome-app
+```
 
-- **Examples**:
-    ```sh
-    apito deploy --project myApp
+This interactive command will:
 
-### `pack`
-Deploy the project to a specified provider.
+- Create a new project directory
+- Set up system and project databases
+- Download the latest Apito engine
+- Configure your project settings
 
-- **Usage:**
-  ```sh
-  apito pack --project <projectName> --provider <provider> [--tag <dockerTag>]
-  
-- **Options**:
-    - `--project, -p` : The project name (required).
-    - `--provider` : The deployment provider (docker/zip) (required).
-    - `--tag` : Docker image tag (optional, for Docker provider).
+### 2. Start Apito Engine and Console
 
-- **Examples**:
-    ```sh
-    apito pack --project myApp --provider docker
-    apito pack --project myApp --provider docker --tag customTag
-    apito pack --project myApp --provider zip
+```bash
+apito start
+```
 
-### `change-pass`
-Change the password for a user.
+This command will:
 
-- **Usage:**
-- **Options**:
-    - `--project, -p` : The project name (required).
-    - `--user, -u` : The username (required).
+- Download the latest Apito engine from [GitHub releases](https://github.com/apito-io/engine/releases) to `~/.apito/bin/engine`
+- Download the latest console from [GitHub releases](https://github.com/apito-io/console/releases) to `~/.apito/console`
+- Install and configure Caddy web server to `~/.apito/bin/caddy`
+- Start the engine on port 5050
+- Serve the console on port 4000
+- Manage processes with PID files and logs
 
-- **Examples**: 
-    ```sh
-    apito change-pass --project myApp --user admin
+### 3. Deploy to Apito Cloud
 
-## Additional Information
+```bash
+apito deploy -p my-awesome-app
+```
 
-- The CLI saves configuration files in the ~/.apito directory, similar to how GitHub saves its configuration.
-- The create command will prompt for necessary details and save configuration in a .env file in the project directory.
-- The deploy command will automatically detect the runtime environment and download the appropriate release asset from the Apito GitHub repository.
+## 📚 Command Reference
+
+### 🔧 **System Management**
+
+#### `init` - Initialize Apito CLI System
+
+Initializes and validates the Apito CLI system configuration.
+
+**Usage:**
+
+```bash
+apito init
+```
+
+**Features:**
+
+- Creates `~/.apito` directory if it doesn't exist
+- Sets up system configuration file with default values
+- Validates system database configuration
+- Checks mandatory environment variables (ENVIRONMENT, CORS_ORIGIN, COOKIE_DOMAIN, BRANKA_KEY)
+- Validates database connection settings (host, port, user, password)
+- Checks port availability (5050, 4000)
+- Interactive configuration prompts for missing settings
+
+**What it checks:**
+
+- System database engine configuration (defaults to "embed")
+- Database connection parameters (host, port, user, password, database name)
+- Environment settings (local, development, staging, production)
+- CORS and cookie domain configuration
+- BRANKA_KEY generation (auto-generates if not provided)
+- Port availability for Apito services (5050, 4000)
+
+**Examples:**
+
+```bash
+# First-time setup
+apito init
+
+# Re-run to validate configuration
+apito init
+```
+
+**Default Configuration:**
+The init command creates a `.env` file with these default values:
+
+```env
+ENVIRONMENT=local
+COOKIE_DOMAIN=localhost
+CORS_ORIGIN=http://localhost:4000
+PLUGIN_PATH=plugins
+PUBLIC_KEY_PATH=keys/public.key
+PRIVATE_KEY_PATH=keys/private.key
+APITO_SYSTEM_DB_ENGINE=embed
+BRANKA_KEY=<auto-generated-32-character-key>
+```
+
+**BRANKA_KEY Behavior:**
+
+- If BRANKA_KEY is not set, a secure 32-character random key is automatically generated
+- If BRANKA_KEY is already set, the existing value is preserved
+- The generated key includes uppercase, lowercase, numbers, and special characters
+
+### 🔧 **Project Management**
+
+#### `create` - Create New Resources
+
+Creates new projects, functions, or models via API calls to the Apito server.
+
+**Usage:**
+
+```bash
+apito create <resource> [options]
+```
+
+**Resources:**
+
+- `project` - Create a new Apito project via API
+- `function` - Create a new function (coming soon)
+- `model` - Create a new data model (coming soon)
+
+**Options:**
+
+- `--name, -n` - Name of the resource
+- `--project, -p` - Project name (alternative to --name)
+
+**Features:**
+
+- Interactive project creation with prompts
+- Database type selection with visual icons
+- Automatic SYNC_TOKEN management
+- HTTP API integration with authentication
+- Real-time project creation on Apito server
+
+**Database Options:**
+
+- **Embed & SQL** (mdi:database) - Default embedded database
+- **MySQL** (logos:mysql) - MySQL database
+- **MariaDB** (logos:mariadb) - MariaDB database
+- **PostgreSQL** (logos:postgresql) - PostgreSQL database
+- **Couchbase** (logos:couchbase) - Couchbase database
+- **Oracle** (logos:oracle) - Oracle database
+- **Firestore** (logos:firebase) - Firebase Firestore
+- **MongoDB** (logos:mongodb) - MongoDB database
+- **DynamoDB** (logos:aws-dynamodb) - AWS DynamoDB
+
+**Examples:**
+
+```bash
+# Create a new project with prompts
+apito create project
+
+# Create a project with name flag
+apito create project -p my-ecommerce-app
+
+# Create a project with name flag (alternative)
+apito create project -n my-ecommerce-app
+```
+
+**SYNC_TOKEN Setup:**
+
+The first time you create a project, you'll need to provide a SYNC_TOKEN:
+
+1. Go to http://localhost:4000
+2. Navigate to Cloud Sync option
+3. Copy the generated token
+4. Paste it when prompted by the CLI
+
+The token is automatically saved and reused for future requests.
+
+#### `list` - List Resources
+
+Lists projects or functions.
+
+**Usage:**
+
+```bash
+apito list [resource] [-p <project>]
+```
+
+**Resources:**
+
+- `function` - List functions in a project
+- (no resource) - List all projects
+
+**Options:**
+
+- `--project, -p` - Project name (required for listing functions)
+
+**Examples:**
+
+```bash
+# List all projects
+apito list
+
+# List functions in a specific project
+apito list function -p my-ecommerce-app
+```
+
+### 🚀 **Development & Execution**
+
+#### `start` - Start Apito Engine and Console
+
+Starts the Apito engine and console with automatic setup and downloads.
+
+**Usage:**
+
+```bash
+apito start
+```
+
+**Options:**
+
+- (none)
+
+**Features:**
+
+- **Automatic Setup**: Downloads and installs all required components
+- **Port Management**: Checks port availability (5050, 4000)
+- **Engine Management**: Downloads latest engine from [GitHub releases](https://github.com/apito-io/engine/releases)
+- **Console Management**: Downloads latest console from [GitHub releases](https://github.com/apito-io/console/releases)
+- **Caddy Integration**: Automatically installs and configures [Caddy server](https://github.com/caddyserver/caddy/releases)
+- **Process Management**: Tracks running processes and prevents duplicates
+- **Graceful Shutdown**: Stops all services on Ctrl+C
+
+**What it does:**
+
+1. **Port Check**: Verifies ports 5050 and 4000 are available
+2. **Engine Download**: Downloads latest engine binary for your system architecture
+3. **Process Check**: Ensures engine isn't already running
+4. **Console Download**: Downloads latest console static files
+5. **Caddy Installation**: Installs Caddy web server if not present
+6. **Service Startup**: Starts engine and serves console with Caddy
+7. **Monitoring**: Waits for interrupt signal to stop services
+
+**Examples:**
+
+```bash
+# Start Apito with automatic setup
+apito start
+```
+
+**Access URLs:**
+
+- **Engine API**: http://localhost:5050
+- **Console UI**: http://localhost:4000
+
+**System Requirements:**
+
+- Internet connection for downloading components
+- Write permissions to `~/.apito/` directory
+- Port 5050 and 4000 available
+
+#### `stop` - Stop Services
+
+Stops one or more Apito services.
+
+**Usage:**
+
+```bash
+apito stop [engine|console|all]
+```
+
+**Examples:**
+
+```bash
+# Stop everything
+apito stop
+
+# Stop only engine
+apito stop engine
+
+# Stop only console
+apito stop console
+```
+
+#### `restart` - Restart Services
+
+Restarts one or more Apito services.
+
+**Usage:**
+
+```bash
+apito restart [engine|console|all]
+```
+
+**Examples:**
+
+```bash
+apito restart
+apito restart engine
+apito restart console
+```
+
+#### `status` - Show Service Status and Logs
+
+Shows whether services are running and prints the last 50 log lines.
+
+**Usage:**
+
+```bash
+apito status [engine|console]
+```
+
+**Examples:**
+
+```bash
+apito status
+apito status engine
+apito status console
+```
+
+### 🏗️ **Building & Packaging**
+
+#### `build` - Build Project
+
+Builds your project for different deployment targets.
+
+**Usage:**
+
+```bash
+apito build <target> -p <project> [options]
+```
+
+**Targets:**
+
+- `docker` - Build Docker image
+- `zip` - Create deployment package
+
+**Options:**
+
+- `--project, -p` - Project name (required)
+- `--tag, -t` - Docker image tag (optional, for docker builds)
+
+**Examples:**
+
+```bash
+# Build Docker image
+apito build docker -p my-ecommerce-app
+apito build docker -p my-ecommerce-app -t v1.0.0
+
+# Create ZIP package
+apito build zip -p my-ecommerce-app
+```
+
+### ☁️ **Deployment**
+
+#### `deploy` - Deploy to Apito Cloud
+
+Deploys your project to Apito Cloud platform.
+
+**Usage:**
+
+```bash
+apito deploy -p <project>
+```
+
+**Options:**
+
+- `--project, -p` - Project name (required)
+
+**Examples:**
+
+```bash
+apito deploy -p my-ecommerce-app
+```
+
+**Features:**
+
+- Interactive deployment token setup
+- Automatic cloud configuration
+- Real-time deployment status
+
+#### `pack` - Package for Deployment
+
+Packages your project for various deployment providers.
+
+**Usage:**
+
+```bash
+apito pack <provider> -p <project> [options]
+```
+
+**Providers:**
+
+- `apito` - Package for Apito Cloud
+- `aws` - Package for AWS (coming soon)
+- `google` - Package for Google Cloud (coming soon)
+
+**Options:**
+
+- `--project, -p` - Project name (required)
+- `--tag` - Docker image tag (optional)
+
+**Examples:**
+
+```bash
+# Package for Apito Cloud
+apito pack apito -p my-ecommerce-app
+
+# Package for AWS (when available)
+apito pack aws -p my-ecommerce-app
+```
+
+### 🔄 **Updates & Maintenance**
+
+#### `update` - Update Components
+
+Updates Apito engine or console to the latest version.
+
+**Usage:**
+
+```bash
+apito update <component> -p <project> [options]
+```
+
+**Components:**
+
+- `engine` - Update the Apito engine
+- `console` - Update the console interface
+
+**Options:**
+
+- `--project, -p` - Project name (required)
+- `--version, -v` - Specific version to update to (optional)
+
+**Examples:**
+
+```bash
+# Update engine to latest version
+apito update engine -p my-ecommerce-app
+
+# Update to specific version
+apito update engine -p my-ecommerce-app -v v1.2.3
+
+# Update console
+apito update console -p my-ecommerce-app
+```
+
+### 🔐 **Authentication & Security**
+
+#### `login` - Authenticate with Apito
+
+Logs in to your Apito account using OAuth.
+
+**Usage:**
+
+```bash
+apito login
+```
+
+**Features:**
+
+- OAuth-based authentication
+- Automatic browser opening
+- Token management
+
+#### `change-pass` - Change User Password
+
+Changes the password for a user in your project.
+
+**Usage:**
+
+```bash
+apito change-pass -p <project> -u <user>
+```
+
+**Options:**
+
+- `--project, -p` - Project name (required)
+- `--user, -u` - Username (required)
+
+**Examples:**
+
+```bash
+apito change-pass -p my-ecommerce-app -u admin
+```
+
+**Features:**
+
+- Secure password input with masking
+- Password confirmation
+- Minimum password length validation (6 characters)
+
+## 🗂️ Project Structure
+
+Apito CLI sets up the following structure:
+
+```
+~/.apito/
+├── bin/
+│   ├── engine               # Engine binary
+│   ├── caddy                # Caddy binary
+│   └── .env                 # System configuration
+├── console/                 # Console static files
+├── Caddyfile                # Console server config
+├── logs/
+│   ├── engine.log
+│   └── console.log
+└── run/
+    ├── engine.pid
+    └── console.pid
+```
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+The CLI manages configuration in `~/.apito/bin/.env`:
+
+- `ENVIRONMENT` - local/development/staging/production
+- `COOKIE_DOMAIN` - e.g., localhost
+- `CORS_ORIGIN` - e.g., http://localhost:4000
+- `BRANKA_KEY` - Generated secret key
+- `APITO_SYSTEM_DB_ENGINE` - embed or external
+- `SYSTEM_DB_*` - connection parameters when external
+- `APITO_PROJECT_DB_ENGINE` - embedded by default
+- `SERVE_PORT` - Engine port (default 5050)
+- `CACHE_*`, `KV_ENGINE`, `AUTH_SERVICE_PROVIDER`, `TOKEN_TTL`
+- `CADDY_PATH` - Absolute path to caddy (managed by CLI)
+
+### Database Support
+
+- **System Database**: boltDB (default), PostgreSQL, MySQL
+- **Project Database**: PostgreSQL, MySQL, MariaDB, Firestore (alpha)
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+**Permission Denied Error:**
+
+```bash
+# The installer will automatically handle permissions
+# If you encounter issues, run with sudo:
+sudo ./install.sh
+```
+
+**Project Not Found:**
+
+```bash
+# List all projects to see available ones
+apito list
+
+# Create a new project if needed
+apito create project -n my-new-project
+```
+
+**Engine or Console Won't Start:**
+
+```bash
+# Check if services are running and view logs
+apito status
+
+# Stop services
+apito stop
+
+# Then try running again
+apito start
+```
+
+**Deployment Fails:**
+
+```bash
+# Ensure you have a valid deploy token
+# Get it from https://app.apito.io
+apito deploy -p my-project
+```
+
+## 🔗 Useful Links
+
+- **Apito Platform**: https://app.apito.io
+- **Documentation**: https://docs.apito.io
+- **GitHub**: https://github.com/apito-io/cli
+- **Support**: https://github.com/apito-io/cli/issues
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Happy coding with Apito! 🎉**

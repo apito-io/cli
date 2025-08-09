@@ -1,20 +1,24 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
-	"github.com/cavaliergopher/grab/v3"
-	"github.com/kyokomi/emoji/v2"
 	"github.com/manifoldco/promptui"
-	"github.com/mholt/archiver/v3"
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	createCmd.Flags().StringP("project", "p", "", "project name")
+	createCmd.Flags().StringP("name", "n", "", "name of the project, function, or model")
+}
 
 var createCmd = &cobra.Command{
 	Use:       "create",
@@ -23,301 +27,268 @@ var createCmd = &cobra.Command{
 	ValidArgs: []string{"project", "function", "model"},
 	Args:      cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
 	Run: func(cmd *cobra.Command, args []string) {
-
-		actionName := args[0] // take only one and should be one
-
-		projectName, _ := cmd.Flags().GetString("name")
-		if projectName == "" {
-			fmt.Println("Error: project name is required")
-			return
-		}
-
-		projectName = strings.TrimSpace(projectName)
+		actionName := args[0]
 
 		switch actionName {
 		case "project":
-			createProject(projectName)
+			createProject(cmd)
 		case "function":
-			functionName, _ := cmd.Flags().GetString(actionName)
-			createFunction(projectName, functionName)
+			createFunction(cmd)
 		case "model":
-			modelName, _ := cmd.Flags().GetString(actionName)
-			createModel(projectName, modelName)
+			createModel(cmd)
 		default:
-			fmt.Println("Invalid create option. Use 'project', 'function', or 'model'.")
+			print_error("Invalid create option. Use 'project', 'function', or 'model'.")
 		}
 	},
 }
 
-func createProject(project string) {
+type CreateProjectRequest struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	DatabaseType string `json:"database_type"`
+}
 
+type CreateProjectResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Data    struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"data,omitempty"`
+}
+
+func createProject(cmd *cobra.Command) {
+	print_step("🚀 Creating New Apito Project")
+	fmt.Println()
+
+	// Get project name from flags or prompt
+	projectName, _ := cmd.Flags().GetString("project")
+	if projectName == "" {
+		projectName, _ = cmd.Flags().GetString("name")
+	}
+
+	if projectName == "" {
+		prompt := promptui.Prompt{
+			Label: "Project Name",
+			Validate: func(input string) error {
+				if len(strings.TrimSpace(input)) == 0 {
+					return fmt.Errorf("project name cannot be empty")
+				}
+				return nil
+			},
+		}
+		name, err := prompt.Run()
+		if err != nil {
+			print_error("Failed to get project name: " + err.Error())
+			return
+		}
+		projectName = strings.TrimSpace(name)
+	}
+
+	print_status("Project name: " + projectName)
+	fmt.Println()
+
+	// Get project description
+	prompt := promptui.Prompt{
+		Label: "Project Description",
+		Validate: func(input string) error {
+			if len(strings.TrimSpace(input)) == 0 {
+				return fmt.Errorf("project description cannot be empty")
+			}
+			return nil
+		},
+	}
+	description, err := prompt.Run()
+	if err != nil {
+		print_error("Failed to get project description: " + err.Error())
+		return
+	}
+	description = strings.TrimSpace(description)
+
+	print_status("Project description: " + description)
+	fmt.Println()
+
+	// Database selection
+	databaseType, err := selectDatabase()
+	if err != nil {
+		print_error("Failed to select database: " + err.Error())
+		return
+	}
+
+	print_status("Selected database: " + databaseType)
+	fmt.Println()
+
+	// Get or create SYNC_TOKEN
+	syncToken, err := getOrCreateSyncToken()
+	if err != nil {
+		print_error("Failed to get sync token: " + err.Error())
+		return
+	}
+
+	// Create project via HTTP request
+	if err := createProjectViaAPI(projectName, description, databaseType, syncToken); err != nil {
+		print_error("Failed to create project: " + err.Error())
+		return
+	}
+
+	print_success("🎉 Project created successfully!")
+	print_status("Redirecting to project dashboard...")
+	print_status("You can access your project at: http://localhost:4000/projects")
+}
+
+func selectDatabase() (string, error) {
+	databases := []struct {
+		Name string
+		Icon string
+		Type string
+	}{
+		{"Embed & SQL", "mdi:database", "embed"},
+		{"MySQL", "logos:mysql", "mysql"},
+		{"MariaDB", "logos:mariadb", "mariadb"},
+		{"PostgreSQL", "logos:postgresql", "postgresql"},
+		{"Couchbase", "logos:couchbase", "couchbase"},
+		{"Oracle", "logos:oracle", "oracle"},
+		{"Firestore", "logos:firebase", "firestore"},
+		{"MongoDB", "logos:mongodb", "mongodb"},
+		{"DynamoDB", "logos:aws-dynamodb", "dynamodb"},
+	}
+
+	var options []string
+	for _, db := range databases {
+		options = append(options, fmt.Sprintf("%s (%s)", db.Name, db.Icon))
+	}
+
+	prompt := promptui.Select{
+		Label: "Select Database Type",
+		Items: options,
+	}
+
+	index, _, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return databases[index].Type, nil
+}
+
+func getOrCreateSyncToken() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Println("Error finding home directory:", err)
-		return
-	}
-	projectDir := filepath.Join(homeDir, ".apito", project)
-
-	if _, err = os.Stat(projectDir); err == nil {
-		// Create the database file
-		fmt.Println(Red + fmt.Sprintf("A project with the name %s already exists in %s\nPlesea Choose a different name", project, projectDir) + Reset)
-		return
+		return "", fmt.Errorf("error finding home directory: %w", err)
 	}
 
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		fmt.Println("Error creating project directory:", err)
-		return
+	config, err := getConfig(filepath.Join(homeDir, ".apito", "bin"))
+	if err != nil {
+		return "", fmt.Errorf("error reading config: %w", err)
 	}
 
-	// Prompt for project description
+	syncToken := config["SYNC_TOKEN"]
+	if syncToken != "" {
+		print_status("Using existing SYNC_TOKEN")
+		return syncToken, nil
+	}
+
+	print_warning("SYNC_TOKEN not found in configuration")
+	print_status("To create a sync token:")
+	print_status("1. Go to http://localhost:4000")
+	print_status("2. Navigate to Cloud Sync option")
+	print_status("3. Copy the generated token")
+	fmt.Println()
+
 	prompt := promptui.Prompt{
-		Label: "Project Full Name",
+		Label: "Paste your SYNC_TOKEN here",
+		Validate: func(input string) error {
+			if len(strings.TrimSpace(input)) == 0 {
+				return fmt.Errorf("sync token cannot be empty")
+			}
+			return nil
+		},
 	}
-	projectFullName, err := prompt.Run()
+
+	token, err := prompt.Run()
 	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return
+		return "", fmt.Errorf("failed to get sync token: %w", err)
 	}
 
-	/*
-		var style = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4")).
-		PaddingLeft(4).
-		Width(22)
+	token = strings.TrimSpace(token)
 
-		fmt.Println(style.Render(fmt.Sprintf("Project, %s", projectFullName)))
-	*/
-
-	fmt.Println(Blue + fmt.Sprintf(`Project '%s' needs a System database which will be used to store your login details, project schema information,`, projectFullName) + Reset)
-	fmt.Println(Blue + `cloud functions, secret keys and many more system related information. Please Choose a type of system database.` + Reset)
-	fmt.Println(`To get started quickly choose 'storageDb' which is a BadgerDB powered database.`)
-	fmt.Println(Yellow + `Note : storageDB is not recommended for production use.` + Reset)
-
-	// Prompt for database selection
-	dbPrompt := promptui.Select{
-		Label: emoji.Sprint(":electric_plug: Select Apito System Database"),
-		Items: []string{"postgres", "mysql", "storageDb"},
-	}
-	_, db, err := dbPrompt.Run()
-	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return
+	// Save the token to config
+	config["SYNC_TOKEN"] = token
+	if err := saveConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+		return "", fmt.Errorf("error saving sync token: %w", err)
 	}
 
-	if db == "storageDb" {
-		db = "badger"
-	}
-
-	// Collect additional database details if necessary
-	config := map[string]string{
-		"ENV":              "local",
-		"PROJECT_ID":       project,
-		"PROJECT_NAME":     projectFullName,
-		"SYSTEM_DB_ENGINE": db,
-	}
-
-	switch db {
-	case "storageDb":
-		fmt.Println(Green + fmt.Sprintf(`A local database has been created in %s/db`, projectDir) + Reset)
-	case "postgresql", "mysql", "mariadb":
-		dbConfigs := getDBConfig("SYSTEM")
-		if dbConfigs == nil {
-			fmt.Println("Error getting database configuration")
-			return
-		}
-		for k, v := range dbConfigs {
-			config[k] = v
-		}
-	}
-
-	fmt.Println(Blue + emoji.Sprint("Project Database is the main database of your project") + Reset)
-	fmt.Println(Yellow + `Note : firestore/firebase support is still in alpha. Check progess of the driver here: https://github.com/orgs/apito-io/projects/5` + Reset)
-
-	// Prompt for database selection
-	dbPrompt = promptui.Select{
-		Label: emoji.Sprint(":rocket: Choose Apito Project Database"),
-		Items: []string{"postgres", "mysql", "mariadb", "firestore"},
-	}
-	_, db, err = dbPrompt.Run()
-	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return
-	}
-
-	config["PROJECT_DB_ENGINE"] = db
-
-	switch db {
-	case "firestore":
-		fmt.Println(Red + `Support for Firestore is still in alpha. Check progess of the driver here: https://github.com/orgs/apito-io/projects/5` + Reset)
-	case "postgres", "mysql":
-		dbConfigs := getDBConfig("PROJECT")
-		if dbConfigs == nil {
-			fmt.Println("Error getting database configuration")
-			return
-		}
-		for k, v := range dbConfigs {
-			config[k] = v
-		}
-	}
-
-	if err := saveConfig(projectDir, config); err != nil {
-		fmt.Println("Error saving config file:", err)
-		return
-	}
-
-	// Get the latest release tag from GitHub API
-	releaseTag, err := getLatestReleaseTag()
-	if err != nil {
-		fmt.Println("error fetching latest release tag: %w", err)
-		return
-	}
-
-	// Detect runtime environment and download the appropriate asset
-	if err := downloadAndExtractEngine(project, releaseTag, projectDir); err != nil {
-		fmt.Println("Error downloading and extracting binary:", err)
-		return
-	}
-
-	fmt.Println(Green + "Project created successfully!" + Reset)
-	fmt.Println(Blue + `To run the project, run the following command` + Reset)
-	fmt.Println(Green + fmt.Sprintf(`> apito run -p %s`, project) + Reset)
+	print_success("SYNC_TOKEN saved to configuration")
+	return token, nil
 }
 
-func getDBConfig(_prefix string) map[string]string {
-	prompt := promptui.Prompt{Label: "Database Host"}
-	dbHost, err := prompt.Run()
+func createProjectViaAPI(name, description, databaseType, syncToken string) error {
+	requestBody := CreateProjectRequest{
+		Name:         name,
+		Description:  description,
+		DatabaseType: databaseType,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return nil
+		return fmt.Errorf("error marshaling request: %w", err)
 	}
 
-	config := map[string]string{
-		_prefix + "_DB_HOST": dbHost,
+	// Create HTTP client
+	client := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	prompt = promptui.Prompt{Label: "Database Port"}
-	dbPort, err := prompt.Run()
+	// Create request
+	req, err := http.NewRequest("POST", "http://localhost:5050/system/project/create", bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return nil
+		return fmt.Errorf("error creating request: %w", err)
 	}
-	config[_prefix+"_DB_PORT"] = dbPort
 
-	prompt = promptui.Prompt{Label: "Database User"}
-	dbUser, err := prompt.Run()
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+syncToken)
+
+	print_status("Sending request to create project...")
+
+	// Make request
+	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return nil
+		return fmt.Errorf("error making request: %w", err)
 	}
-	config[_prefix+"_DB_USER"] = dbUser
+	defer resp.Body.Close()
 
-	prompt = promptui.Prompt{Label: "Database Password", Mask: '*'}
-	dbPass, err := prompt.Run()
+	// Read response
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return nil
-	}
-	config[_prefix+"_DB_PASS"] = dbPass
-
-	prompt = promptui.Prompt{Label: "Database Name"}
-	dbName, err := prompt.Run()
-	if err != nil {
-		fmt.Println("Prompt failed:", err)
-		return nil
-	}
-	config[_prefix+"_DB_NAME"] = dbName
-
-	return config
-}
-
-func downloadAndExtractEngine(projectName, releaseTag string, destDir string) error {
-
-	baseURL := fmt.Sprintf("https://github.com/apito-io/engine/releases/download/%s/", releaseTag)
-	var assetURL string
-
-	switch runtime.GOOS {
-	case "linux":
-		assetURL = baseURL + "engine-linux-amd64.zip"
-	case "darwin":
-		assetURL = baseURL + "engine-darwin-amd64.zip"
-	case "windows":
-		assetURL = baseURL + "engine-windows-amd64.zip"
-	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+		return fmt.Errorf("error reading response: %w", err)
 	}
 
-	fmt.Println("Downloading engine from:", assetURL)
-
-	// Download the file
-	resp, err := grab.Get(destDir, assetURL)
-	if err != nil {
-		return fmt.Errorf("error downloading file: %w", err)
+	// Parse response
+	var response CreateProjectResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("error parsing response: %w", err)
 	}
 
-	// start UI loop
-	t := time.NewTicker(500 * time.Millisecond)
-	defer t.Stop()
-
-Loop:
-	for {
-		select {
-		case <-t.C:
-			fmt.Printf("  transferred %v / %v bytes (%.2f%%)\n",
-				resp.BytesComplete(),
-				resp.Size,
-				100*resp.Progress())
-
-		case <-resp.Done:
-			// download is complete
-			break Loop
-		}
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server error (%d): %s", resp.StatusCode, response.Message)
 	}
 
-	// check for errors
-	if err := resp.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Download failed: %v\n", err)
-		return err
+	if !response.Success {
+		return fmt.Errorf("project creation failed: %s", response.Message)
 	}
 
-	fmt.Println("Downloaded file saved to:", resp.Filename)
-
-	// Unzip the file
-	err = archiver.Unarchive(resp.Filename, destDir)
-	if err != nil {
-		return fmt.Errorf("error extracting file: %w", err)
-	}
-
-	// Rename the binary to "engine"
-	binaryName := "engine"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	err = os.Rename(filepath.Join(destDir, binaryName), filepath.Join(destDir, projectName))
-	if err != nil {
-		return fmt.Errorf("error renaming binary: %w", err)
-	}
-
-	fmt.Println("Engine binary extracted to:", filepath.Join(destDir, projectName))
+	print_success(fmt.Sprintf("Project '%s' created with ID: %s", response.Data.Name, response.Data.ID))
 	return nil
 }
 
-func createFunction(project, functionName string) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error finding home directory:", err)
-		return
-	}
-	functionDir := filepath.Join(homeDir, ".apito", project, "functions", functionName)
-	if err := os.MkdirAll(functionDir, 0755); err != nil {
-		fmt.Println("Error creating function directory:", err)
-		return
-	}
-	fmt.Println("Function created:", functionName)
+func createFunction(cmd *cobra.Command) {
+	print_error("Function creation not implemented yet")
+	print_status("This feature will be available in a future update")
 }
 
-func createModel(project, modelName string) {
-	fmt.Println("Creating model:", modelName)
-	// Here you can add your GraphQL request logic
+func createModel(cmd *cobra.Command) {
+	print_error("Model creation not implemented yet")
+	print_status("This feature will be available in a future update")
 }

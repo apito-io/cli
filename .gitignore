@@ -3,3 +3,6 @@ apito_cli
 .vscode
 node_modules
 *.cast
+cli
+__debug*
+db/*

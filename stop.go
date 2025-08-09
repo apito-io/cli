@@ -1,72 +1,89 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"syscall"
-
 	"github.com/spf13/cobra"
 )
 
 var stopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop the engine for the specified project",
-	Long:  `Stop the engine process based on the PID stored in ~/.apito/<project>/.env file`,
+	Use:   "stop [engine|console|all]",
+	Short: "Stop Apito services",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		project, _ := cmd.Flags().GetString("project")
-		if project == "" {
-			fmt.Println("Error: --project is required")
+		mode, _ := determineRunMode()
+		target := "all"
+		if len(args) == 1 {
+			target = args[0]
+		}
+		if mode == "docker" {
+			_ = dockerComposeDown()
+			print_success("Docker services stopped")
 			return
 		}
-		stopEngine(project)
+		switch target {
+		case "engine":
+			_ = stopManagedService("engine")
+			print_success("Engine stopped")
+		case "console":
+			_ = stopManagedService("console")
+			print_success("Console stopped")
+		case "all":
+			_ = stopManagedService("console")
+			_ = stopManagedService("engine")
+			print_success("All services stopped")
+		default:
+			print_error("Unknown target. Use one of: engine, console, all")
+		}
 	},
 }
 
-func stopEngine(project string) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error finding home directory:", err)
-		return
-	}
-	projectDir := filepath.Join(homeDir, ".apito", project)
-
-	envMap, err := getConfig(projectDir)
-	if err != nil {
-		fmt.Println("Error reading config file:", err)
-		return
-	}
-
-	pidStr, ok := envMap["ENGINE_PID"]
-	if !ok {
-		fmt.Println("No running engine PID found in config file")
-		return
-	}
-
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		fmt.Println("Invalid PID in config file:", err)
-		return
-	}
-
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		fmt.Println("Error finding process:", err)
-		return
-	}
-
-	if err := process.Signal(syscall.SIGTERM); err != nil {
-		fmt.Println("Error stopping engine process:", err)
-		return
-	}
-
-	// Remove the PID from the .env file
-	err = updateConfig(projectDir, "ENGINE_PID", "")
-	if err != nil {
-		fmt.Println("Error updating config file:", err)
-		return
-	}
-
-	fmt.Println("Engine process stopped")
+var restartCmd = &cobra.Command{
+	Use:   "restart [engine|console|all]",
+	Short: "Restart Apito services",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		mode, _ := determineRunMode()
+		target := "all"
+		if len(args) == 1 {
+			target = args[0]
+		}
+		if mode == "docker" {
+			_ = dockerComposeDown()
+			if err := dockerComposeUp(); err != nil {
+				print_error("Failed to start docker services: " + err.Error())
+				return
+			}
+			print_success("Docker services restarted")
+			return
+		}
+		switch target {
+		case "engine":
+			_ = stopManagedService("engine")
+			if err := startManagedService("engine"); err != nil {
+				print_error("Failed to restart engine: " + err.Error())
+				return
+			}
+			print_success("Engine restarted")
+		case "console":
+			_ = stopManagedService("console")
+			if err := startManagedService("console"); err != nil {
+				print_error("Failed to restart console: " + err.Error())
+				return
+			}
+			print_success("Console restarted")
+		case "all":
+			_ = stopManagedService("console")
+			_ = stopManagedService("engine")
+			if err := startManagedService("engine"); err != nil {
+				print_error("Failed to start engine: " + err.Error())
+				return
+			}
+			if err := startManagedService("console"); err != nil {
+				print_error("Failed to start console: " + err.Error())
+				return
+			}
+			print_success("All services restarted")
+		default:
+			print_error("Unknown target. Use one of: engine, console, all")
+		}
+	},
 }
