@@ -124,15 +124,38 @@ download_with_progress() {
 extract_archive() {
     local archive="$1"
     local output_dir="$2"
-    
-    if command_exists unzip; then
-        unzip -o "$archive" -d "$output_dir"
-    elif command_exists tar; then
-        tar -xf "$archive" -C "$output_dir"
-    else
-        print_error "Neither unzip nor tar is installed. Please install one of them."
-        exit 1
+
+    case "$archive" in
+        *.zip)
+            if command_exists unzip; then
+                unzip -o "$archive" -d "$output_dir"
+                return $?
+            fi
+            ;;
+        *.tar.gz|*.tgz)
+            if command_exists tar; then
+                tar -xzf "$archive" -C "$output_dir"
+                return $?
+            fi
+            ;;
+        *.tar)
+            if command_exists tar; then
+                tar -xf "$archive" -C "$output_dir"
+                return $?
+            fi
+            ;;
+    esac
+
+    # Fallback attempts
+    if command_exists tar; then
+        tar -xf "$archive" -C "$output_dir" && return 0
     fi
+    if command_exists unzip; then
+        unzip -o "$archive" -d "$output_dir" && return 0
+    fi
+
+    print_error "Neither unzip nor tar is available or supported for this archive."
+    exit 1
 }
 
 # Main installation function
@@ -168,6 +191,26 @@ main() {
     print_success "Latest release: $latest_tag"
     echo
     
+    # Detect existing installation
+    local installed_path=""
+    if command -v apito >/dev/null 2>&1; then
+        installed_path=$(command -v apito)
+    fi
+
+    if [ -n "$installed_path" ] && [ -f "$installed_path" ]; then
+        local current_version=$("$installed_path" --version 2>/dev/null | tr -d '\r' | tr -d '\n')
+        print_warning "Apito is already installed at: $installed_path"
+        if [ -n "$current_version" ]; then
+            print_status "Current version: $current_version"
+        fi
+        echo -n "Do you want to update/replace it with $latest_tag? [y/N]: "
+        read -r confirm_update
+        if [[ ! "$confirm_update" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+            print_status "Skipping installation."
+            exit 0
+        fi
+    fi
+
     # Construct download URL
     local binary_url="https://github.com/apito-io/cli/releases/download/$latest_tag/apito_${latest_tag#v}_${os}_${arch}.tar.gz"
     print_status "Download URL: $binary_url"
@@ -215,10 +258,14 @@ main() {
     # Install binary
     print_step "🔧 Installing binary..."
     local target_path="$install_dir/apito"
+    # If installed in a different location, replace in-place to avoid PATH precedence issues
+    if [ -n "$installed_path" ] && [ -w "$(dirname "$installed_path")" ]; then
+        target_path="$installed_path"
+    fi
     
     # Check if binary already exists
     if [ -f "$target_path" ]; then
-        print_warning "Binary already exists. Overwriting..."
+        print_warning "Binary already exists at $target_path. Overwriting..."
     fi
     
     # Copy binary with proper permissions
