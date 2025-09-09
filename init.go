@@ -64,41 +64,12 @@ func initializeSystem() {
 	// Step 2.5: Optional database setup (Docker mode only)
 	if mode == "docker" {
 		print_status("Step 2.5: Database setup (optional)...")
-		prompt := promptui.Select{
-			Label: "Do you want to spin up a local database now?",
-			Items: []string{"Postgres", "MySQL", "MariaDB", "SQLServer", "MongoDB", "Skip (I already have a database)"},
-		}
-		_, choice, err := prompt.Run()
-		if err == nil && choice != "Skip (I already have a database)" {
-			var engine string
-			switch choice {
-			case "Postgres":
-				engine = "postgres"
-			case "MySQL":
-				engine = "mysql"
-			case "MariaDB":
-				engine = "mariadb"
-			case "SQLServer":
-				engine = "sqlserver"
-			case "MongoDB":
-				engine = "mongodb"
-			}
-			if engine != "" {
-				if err := ensureDockerAvailable(); err != nil {
-					print_error("Docker not available: " + err.Error())
-				} else if path, err := writeDBComposeFile(engine); err != nil {
-					print_error("Failed to prepare DB compose: " + err.Error())
-				} else if err := dockerComposeUpFile(path); err != nil {
-					print_error("Failed to start database: " + err.Error())
-				} else {
-					print_success("Database started via Docker: " + engine)
-				}
-			}
-		} else {
-			print_status("Skipping database setup")
-		}
-		fmt.Println()
+		print_status("Database setup will be handled by 'apito start --db system' or 'apito start --db project'")
+		print_status("You can set up databases when starting services")
+	} else {
+		print_status("Database setup will be handled by 'apito start --db system' or 'apito start --db project'")
 	}
+	fmt.Println()
 
 	// Step 3: Validate system database configuration
 	print_status("Step 3: Validating system database configuration...")
@@ -175,17 +146,16 @@ func ensureSystemConfig() error {
 			"PUBLIC_KEY_PATH":         "keys/public.key",
 			"PRIVATE_KEY_PATH":        "keys/private.key",
 			"BRANKA_KEY":              "",
-			"APITO_SYSTEM_DB_ENGINE":  "embed",
+			"APITO_SYSTEM_DB_ENGINE":  "coreDB",
 			"SYSTEM_DB_HOST":          "",
 			"SYSTEM_DB_PORT":          "",
 			"SYSTEM_DB_USER":          "",
 			"SYSTEM_DB_PASSWORD":      "",
-			"SYSTEM_DB_NAME":          "",
-			"APITO_PROJECT_DB_ENGINE": "embedded",
+			"SYSTEM_DB_NAME":          "~/.apito/engine-data/apito_system.db",
 			"SERVE_PORT":              "5050",
 			"CACHE_DRIVER":            "memory",
 			"CACHE_TTL":               "600",
-			"KV_ENGINE":               "embedded",
+			"KV_ENGINE":               "coreDB",
 			"AUTH_SERVICE_PROVIDER":   "local",
 			"TOKEN_TTL":               "60",
 		}

@@ -1,19 +1,18 @@
 package main
 
 import (
+	"archive/zip"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
-
-	"archive/zip"
-	"compress/gzip"
-	"io"
-	"os/exec"
 
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/joho/godotenv"
@@ -89,7 +88,14 @@ func downloadAndExtractEngine(projectName, releaseTag string, destDir string) er
 	return nil
 }
 
+// getConfig reads configuration from a project directory (deprecated, use ReadEnv instead)
 func getConfig(projectDir string) (map[string]string, error) {
+	// For backward compatibility, if the path contains "bin", use ReadEnv
+	if strings.Contains(projectDir, "bin") {
+		return ReadEnv()
+	}
+
+	// Otherwise, use the old method for project-specific configs
 	configFile := filepath.Join(projectDir, ConfigFile)
 	envMap, err := godotenv.Read(configFile)
 	if err != nil {
@@ -99,24 +105,14 @@ func getConfig(projectDir string) (map[string]string, error) {
 	return envMap, nil
 }
 
-func updateConfig(projectDir, key, value string) error {
-	envMap, err := getConfig(projectDir)
-	if err != nil {
-		return fmt.Errorf("error reading config file: %w", err)
-	}
-
-	envMap[key] = value
-
-	// write goenv back to config file
-
-	if err := saveConfig(projectDir, envMap); err != nil {
-		return fmt.Errorf("error saving config file: %w", err)
-	}
-
-	return nil
-}
-
+// saveConfig saves configuration to a project directory (deprecated, use WriteEnv instead)
 func saveConfig(projectDir string, config map[string]string) error {
+	// For backward compatibility, if the path contains "bin", use WriteEnv
+	if strings.Contains(projectDir, "bin") {
+		return WriteEnv(config)
+	}
+
+	// Otherwise, use the old method for project-specific configs
 	configFile := filepath.Join(projectDir, ConfigFile)
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -135,6 +131,23 @@ func saveConfig(projectDir string, config map[string]string) error {
 	// write the config to the file
 	if err := godotenv.Write(config, configFile); err != nil {
 		return fmt.Errorf("error writing config file: %w", err)
+	}
+
+	return nil
+}
+
+// updateConfig updates a single configuration value in a project directory
+func updateConfig(projectDir, key, value string) error {
+	envMap, err := getConfig(projectDir)
+	if err != nil {
+		return fmt.Errorf("error reading config file: %w", err)
+	}
+
+	envMap[key] = value
+
+	// write back to config file
+	if err := saveConfig(projectDir, envMap); err != nil {
+		return fmt.Errorf("error saving config file: %w", err)
 	}
 
 	return nil

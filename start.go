@@ -23,20 +23,28 @@ import (
 var startWithDB bool
 
 var startCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start [--db system|project]",
 	Short: "Start the Apito engine and console",
-	Long:  `Start the Apito engine and console with automatic setup and downloads. Optionally start a database in Docker mode.`,
+	Long:  `Start the Apito engine and console with automatic setup and downloads. Optionally start a system or project database in Docker mode.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check if --db flag is set
+		dbType, _ := cmd.Flags().GetString("db")
+
 		// If --db specified, run database helper first
-		if startWithDB {
-			startDatabaseInteractive()
+		if dbType != "" {
+			if dbType != "system" && dbType != "project" {
+				print_error("Invalid database type. Use 'system' or 'project'")
+				return
+			}
+			startDatabaseInteractive(dbType)
+		} else {
+			startApito()
 		}
-		startApito()
 	},
 }
 
 func init() {
-	startCmd.Flags().BoolVar(&startWithDB, "db", false, "Start a database via Docker before services (Docker mode only)")
+	startCmd.Flags().String("db", "", "Start a database via Docker before services (system|project)")
 }
 
 func startApito() {
@@ -167,7 +175,7 @@ func startApito() {
 	} else {
 		// Docker mode
 		print_status("Starting services via Docker...")
-		if err := ensureDockerAvailable(); err != nil {
+		if err := ensureDockerAndComposeAvailable(); err != nil {
 			print_error("Docker not available: " + err.Error())
 			return
 		}
