@@ -230,14 +230,10 @@ main() {
     
     # Setup directories
     local temp_dir=$(mktemp -d)
-    local install_dir=$(get_install_dir)
     
     print_status "Temporary directory: $temp_dir"
-    print_status "Installation directory: $install_dir"
+    print_status "Installation strategy: ~/.local/bin + symlink to /usr/local/bin"
     echo
-    
-    # Ensure installation directory exists
-    ensure_install_dir "$install_dir"
     
     # Download binary
     print_step "⬇️  Downloading Apito CLI..."
@@ -269,35 +265,57 @@ main() {
     
     # Install binary
     print_step "🔧 Installing binary..."
-    local target_path="$install_dir/apito"
-    # If installed in a different location, replace in-place to avoid PATH precedence issues
-    if [ -n "$installed_path" ] && [ -w "$(dirname "$installed_path")" ]; then
-        target_path="$installed_path"
+    
+    # Always install to ~/.local/bin first
+    local local_bin_dir="$HOME/.local/bin"
+    local local_target="$local_bin_dir/apito"
+    
+    # Ensure ~/.local/bin exists
+    if [ ! -d "$local_bin_dir" ]; then
+        print_status "Creating directory: $local_bin_dir"
+        mkdir -p "$local_bin_dir"
     fi
     
-    # Check if binary already exists
-    if [ -f "$target_path" ]; then
-        print_warning "Binary already exists at $target_path. Overwriting..."
-    fi
+    # Copy binary to ~/.local/bin
+    cp "$binary_path" "$local_target"
+    chmod +x "$local_target"
+    print_success "Binary installed to: $local_target"
     
-    # Copy binary with proper permissions
-    if is_root || [ -w "$install_dir" ]; then
-        cp "$binary_path" "$target_path"
-        chmod +x "$target_path"
-    else
-        if has_sudo; then
-            print_status "Requesting sudo permissions to install binary..."
-            sudo cp "$binary_path" "$target_path"
-            sudo chmod +x "$target_path"
-        else
-            print_error "Cannot write to $install_dir and sudo is not available."
-            print_error "Please run this script as root or install sudo."
-            rm -rf "$temp_dir"
-            exit 1
+    # Create symlink in /usr/local/bin for immediate availability
+    local symlink_target="/usr/local/bin/apito"
+    
+    # Remove existing symlink or binary if it exists
+    if [ -L "$symlink_target" ] || [ -f "$symlink_target" ]; then
+        if [ -w "/usr/local/bin" ]; then
+            rm -f "$symlink_target"
+            print_status "Removed existing binary/symlink at $symlink_target"
+        elif has_sudo; then
+            sudo rm -f "$symlink_target"
+            print_status "Removed existing binary/symlink at $symlink_target"
         fi
     fi
     
-    print_success "Binary installed successfully!"
+    # Create symlink
+    if [ -w "/usr/local/bin" ]; then
+        ln -sf "$local_target" "$symlink_target"
+        print_success "Created symlink: $symlink_target -> $local_target"
+    elif has_sudo; then
+        print_status "Requesting sudo permissions to create symlink..."
+        sudo ln -sf "$local_target" "$symlink_target"
+        print_success "Created symlink: $symlink_target -> $local_target"
+    else
+        print_warning "Cannot create symlink in /usr/local/bin"
+        print_warning "Add $local_bin_dir to your PATH to use 'apito' command"
+        
+        # Still try to add to PATH for future sessions
+        if [[ ":$PATH:" != *":$local_bin_dir:"* ]]; then
+            print_status "Adding $local_bin_dir to PATH in shell profiles"
+            echo "export PATH=\"$local_bin_dir:\$PATH\"" >> "$HOME/.bashrc" 2>/dev/null || true
+            echo "export PATH=\"$local_bin_dir:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || true
+            print_warning "Please restart your terminal or run: export PATH=\"$local_bin_dir:\$PATH\""
+        fi
+    fi
+    
     echo
     
     # Cleanup

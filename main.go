@@ -20,7 +20,7 @@ func main() {
 	// Set version and enable version flag
 	rootCmd.Version = version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
-	
+
 	var project string
 	rootCmd.PersistentFlags().StringVarP(&project, "project", "p", "", "ver")
 
