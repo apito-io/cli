@@ -198,17 +198,29 @@ main() {
     fi
 
     if [ -n "$installed_path" ] && [ -f "$installed_path" ]; then
-        local current_version=$("$installed_path" --version 2>/dev/null | tr -d '\r' | tr -d '\n')
         print_warning "Apito is already installed at: $installed_path"
-        if [ -n "$current_version" ]; then
+        
+        # Try to get current version, handle failures gracefully
+        local current_version=""
+        local version_output=$("$installed_path" --version 2>&1)
+        local version_exit_code=$?
+        
+        if [ $version_exit_code -eq 0 ]; then
+            current_version=$(echo "$version_output" | tr -d '\r' | tr -d '\n')
             print_status "Current version: $current_version"
+        else
+            print_status "Current version: Unable to determine (--version not supported)"
         fi
+        
+        echo
         echo -n "Do you want to update/replace it with $latest_tag? [y/N]: "
-        read -r confirm_update
+        read -r confirm_update < /dev/tty
+        
         if [[ ! "$confirm_update" =~ ^([yY]|[yY][eE][sS])$ ]]; then
             print_status "Skipping installation."
             exit 0
         fi
+        echo
     fi
 
     # Construct download URL
@@ -297,7 +309,16 @@ main() {
     # Verify installation
     print_step "✅ Verifying installation..."
     if command -v apito >/dev/null 2>&1; then
-        local version=$(apito --version 2>/dev/null || echo "unknown version")
+        local version=""
+        local version_output=$(apito --version 2>&1)
+        local version_exit_code=$?
+        
+        if [ $version_exit_code -eq 0 ]; then
+            version=$(echo "$version_output" | tr -d '\r' | tr -d '\n')
+        else
+            version="installed (--version not supported yet)"
+        fi
+        
         print_success "Apito CLI installed successfully!"
         print_success "Version: $version"
         print_success "Location: $(which apito)"
