@@ -360,23 +360,14 @@ func listPlugins() {
 
 	print_step("📋 Listing Plugins")
 
-	config, err := loadCLIConfig()
+	account, err := getAccountConfig("")
 	if err != nil {
-		print_error("Failed to load configuration: " + err.Error())
+		print_error("Failed to get account configuration: " + err.Error())
 		return
 	}
 
-	serverURL := config.ServerURL
-	if serverURL == "" {
-		print_error("Server URL not configured. Run 'apito config set server_url <url>' first")
-		return
-	}
-
-	cloudSyncKey := config.CloudSyncKey
-	if cloudSyncKey == "" {
-		print_error("Cloud sync key not configured. Run 'apito config set cloud_sync_key <key>' first")
-		return
-	}
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
 
 	// Make API request
 	req, err := http.NewRequest("GET", serverURL+"/system/plugin", nil)
@@ -385,7 +376,7 @@ func listPlugins() {
 		return
 	}
 
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -448,14 +439,14 @@ func getPluginStatus(pluginID string) {
 
 	print_step(fmt.Sprintf("🔍 Plugin Status: %s", pluginID))
 
-	config, err := loadCLIConfig()
+	account, err := getAccountConfig("")
 	if err != nil {
-		print_error("Failed to load configuration: " + err.Error())
+		print_error("Failed to get account configuration: " + err.Error())
 		return
 	}
 
-	serverURL := config.ServerURL
-	cloudSyncKey := config.CloudSyncKey
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
 	if err != nil {
@@ -463,7 +454,7 @@ func getPluginStatus(pluginID string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -549,14 +540,14 @@ func deletePlugin(pluginID string) {
 
 	print_step(fmt.Sprintf("🗑️  Deleting Plugin: %s", pluginID))
 
-	config, err := loadCLIConfig()
+	account, err := getAccountConfig("")
 	if err != nil {
-		print_error("Failed to load configuration: " + err.Error())
+		print_error("Failed to get account configuration: " + err.Error())
 		return
 	}
 
-	serverURL := config.ServerURL
-	cloudSyncKey := config.CloudSyncKey
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
 
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
 	if err != nil {
@@ -564,7 +555,7 @@ func deletePlugin(pluginID string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -599,14 +590,14 @@ func controlPlugin(pluginID, action string) {
 
 	print_step(fmt.Sprintf("🎛️  %s Plugin: %s", strings.Title(action), pluginID))
 
-	config, err := loadCLIConfig()
+	account, err := getAccountConfig("")
 	if err != nil {
-		print_error("Failed to load configuration: " + err.Error())
+		print_error("Failed to get account configuration: " + err.Error())
 		return
 	}
 
-	serverURL := config.ServerURL
-	cloudSyncKey := config.CloudSyncKey
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/system/plugin/%s/%s", serverURL, pluginID, action), nil)
 	if err != nil {
@@ -614,7 +605,7 @@ func controlPlugin(pluginID, action string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -641,24 +632,14 @@ func controlPlugin(pluginID, action string) {
 }
 
 func checkServerConfig() bool {
-	config, err := loadCLIConfig()
+	// Get account configuration
+	_, err := getAccountConfig("")
 	if err != nil {
-		print_error("Failed to load configuration: " + err.Error())
+		print_error("Account configuration error: " + err.Error())
 		return false
 	}
 
-	if config.ServerURL == "" {
-		print_error("Server URL not configured")
-		print_status("Run: apito config set server_url <url>")
-		return false
-	}
-
-	if config.CloudSyncKey == "" {
-		print_error("Cloud sync key not configured")
-		print_status("Run: apito config set cloud_sync_key <key>")
-		return false
-	}
-
+	// Account config is already validated in getAccountConfig
 	return true
 }
 
@@ -879,7 +860,7 @@ func getServerPlatformInfo(serverURL, cloudSyncKey string) (*ServerPlatformInfo,
 		return nil, err
 	}
 
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -953,13 +934,13 @@ func validatePlatformCompatibility(pluginDir string, config *PluginConfig, serve
 }
 
 func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, pluginDir string) (*PluginOperationResponse, error) {
-	appConfig, err := loadCLIConfig()
+	account, err := getAccountConfig("")
 	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
+		return nil, fmt.Errorf("failed to get account configuration: %w", err)
 	}
 
-	serverURL := appConfig.ServerURL
-	cloudSyncKey := appConfig.CloudSyncKey
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
 
 	// Validate platform compatibility before deployment
 	if err := validatePlatformCompatibility(pluginDir, config, serverURL, cloudSyncKey); err != nil {
@@ -1019,7 +1000,7 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Apito-Key", cloudSyncKey)
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
 
 	// Send request
 	client := &http.Client{Timeout: 5 * time.Minute} // Longer timeout for uploads

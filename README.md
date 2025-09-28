@@ -179,7 +179,7 @@ apito init
 
 **What it checks:**
 
-- System database engine configuration (defaults to "embed")
+- System database engine configuration (defaults to "coreDB")
 - Database connection parameters (host, port, user, password, database name)
 - Environment settings (local, development, staging, production)
 - CORS and cookie domain configuration
@@ -418,7 +418,7 @@ Apito CLI provides a comprehensive plugin management system that allows you to c
 
 #### `config` - Manage CLI Configuration
 
-Configure server URL, cloud sync key, and other CLI settings for plugin management.
+Configure accounts, server URLs, cloud sync keys, and other CLI settings for plugin management.
 
 **Usage:**
 
@@ -429,38 +429,117 @@ apito config <command> [options]
 **Commands:**
 
 - `set <key> <value>` - Set a configuration value
+- `set account <account-name> <url|key> <value>` - Set account-specific configuration
 - `get [key]` - Get configuration value(s)
 - `init` - Initialize configuration interactively
 - `reset` - Reset configuration to defaults
 
 **Configuration Keys:**
 
-- `server_url` - Apito server URL for plugin management
-- `cloud_sync_key` - Authentication key for secure plugin operations
 - `timeout` - Request timeout in seconds (default: 30)
 - `default_plugin` - Default plugin for operations
 - `mode` - CLI run mode (docker or manual)
+- `default_account` - Default account for plugin operations
+
+**Account Configuration:**
+
+- `url` - Apito server URL for the account
+- `key` - Cloud sync key for the account
 
 **Examples:**
 
 ```bash
-# Interactive configuration setup
+# Interactive configuration setup (creates accounts)
 apito config init
 
-# Set server URL
-apito config set server_url https://api.apito.io
+# Set account-specific server URL
+apito config set account production url https://api.apito.io
 
-# Set cloud sync key
-apito config set cloud_sync_key abc123...
+# Set account-specific cloud sync key
+apito config set account production key abc123...
 
-# View all configuration
+# Set default account
+apito config set default_account production
+
+# View all configuration including accounts
 apito config get
 
 # View specific setting
-apito config get server_url
+apito config get default_account
+
+# View all accounts
+apito config get account
 
 # Reset all configuration
 apito config reset
+```
+
+#### `account` - Manage Multiple Accounts
+
+Manage multiple Apito accounts for different environments (production, staging, local, etc.).
+
+**Usage:**
+
+```bash
+apito account <command> [options]
+```
+
+**Commands:**
+
+- `create <account-name>` - Create a new account with interactive setup
+- `list` - List all configured accounts
+- `select <account-name>` - Set default account for plugin operations
+- `test <account-name>` - Test account connection and credentials
+- `delete <account-name>` - Delete an account configuration
+
+**Examples:**
+
+```bash
+# Create a new account
+apito account create production
+
+# List all accounts
+apito account list
+
+# Test account connection
+apito account test production
+
+# Set default account
+apito account select production
+
+# Delete an account
+apito account delete staging
+```
+
+**Account Workflow:**
+
+```bash
+# 1. Create accounts for different environments
+apito account create production
+apito account create staging
+apito account create local
+
+# 2. Configure each account
+apito config set account production url https://api.apito.io
+apito config set account production key prod-key-123
+
+apito config set account staging url https://staging-api.apito.io
+apito config set account staging key staging-key-456
+
+apito config set account local url http://localhost:5050
+apito config set account local key local-key-789
+
+# 3. Test account connections
+apito account test production
+apito account test staging
+apito account test local
+
+# 4. Set default account
+apito account select production
+
+# 5. Use plugin commands (will use default account)
+apito plugin deploy
+apito plugin list
 ```
 
 #### `plugin` - Manage HashiCorp Plugins
@@ -501,26 +580,35 @@ apito plugin <command> [options]
 ```bash
 # 1. Configure CLI for plugin management
 apito config init
+# This creates your first account interactively
 
-# 2. Create new plugin scaffold
+# 2. Create additional accounts for different environments (optional)
+apito account create staging
+apito config set account staging url https://staging-api.apito.io
+apito config set account staging key staging-key-456
+
+# 3. Set default account
+apito account select production
+
+# 4. Create new plugin scaffold
 apito plugin create
 # Follow prompts to select:
 # - Plugin name (e.g., hc-my-awesome-plugin)
 # - Language (Go, JavaScript, Python)
 # - Plugin type (System, Project, Custom)
 
-# 3. Develop your plugin
+# 5. Develop your plugin
 cd hc-my-awesome-plugin
 # Edit main.go or main.js based on your language choice
 # Modify config.yml with plugin metadata
 
-# 4. Build plugin
+# 6. Build plugin
 apito plugin build
 
-# 5. Deploy plugin to server
+# 7. Deploy plugin to server (uses default account)
 apito plugin deploy
 
-# 6. Check plugin status
+# 8. Check plugin status
 apito plugin status hc-my-awesome-plugin
 ```
 
@@ -994,10 +1082,13 @@ The CLI manages two types of configuration:
 #### **CLI Configuration (`~/.apito/config.yml`)**
 
 - `mode` - CLI run mode (docker or manual)
-- `server_url` - Apito server URL for plugin management
-- `cloud_sync_key` - Authentication key for secure plugin operations
+- `default_account` - Default account for plugin operations
 - `timeout` - Request timeout in seconds (default: 30)
 - `default_plugin` - Default plugin for operations
+- `accounts` - Account configurations map
+  - `account_name` - Account configuration
+    - `server_url` - Apito server URL for the account
+    - `cloud_sync_key` - Authentication key for the account
 
 #### **Engine Configuration (`~/.apito/bin/.env`)**
 
@@ -1184,11 +1275,19 @@ docker volume rm apito-system-postgres_data
 ```bash
 # Plugin configuration issues
 apito config get                     # Check CLI configuration
+apito account list                   # List all accounts
 apito config init                    # Reconfigure CLI settings
 
 # Plugin deployment failures
 apito plugin list                    # Check server connectivity
 apito plugin status <plugin-id>     # Check specific plugin status
+
+# Account-related issues
+apito account create <name>          # Create new account
+apito account test <name>            # Test account connection
+apito account select <name>          # Set default account
+apito config set account <name> url <url>  # Set account URL
+apito config set account <name> key <key>  # Set account key
 
 # Plugin server connection issues
 curl -H "Authorization: Bearer <sync-key>" \
@@ -1245,6 +1344,13 @@ apito plugin status <plugin-id>     # Check error messages
 # Plugin performance issues
 apito plugin stop <plugin-id>       # Stop plugin
 apito plugin start <plugin-id>      # Start plugin fresh
+
+# Account switching for different environments
+apito account test staging          # Test staging account first
+apito account select staging        # Switch to staging account
+apito plugin deploy                 # Deploy to staging
+apito account test production       # Test production account
+apito account select production     # Switch back to production
 
 # Plugin logs (server-side)
 # Check your Apito server logs for plugin-specific errors

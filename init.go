@@ -184,13 +184,13 @@ func validateSystemDatabase() error {
 
 	dbEngine := config["APITO_SYSTEM_DB_ENGINE"]
 	if dbEngine == "" {
-		dbEngine = "embed"
+		dbEngine = "coreDB"
 	}
 
 	print_status("System database engine: " + dbEngine)
 
 	// If using external database, validate configuration
-	if dbEngine != "embed" {
+	if dbEngine != "coreDB" {
 		requiredFields := []string{"SYSTEM_DB_HOST", "SYSTEM_DB_PORT", "SYSTEM_DB_USER", "SYSTEM_DB_PASSWORD", "SYSTEM_DB_NAME"}
 		missingFields := []string{}
 

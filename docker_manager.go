@@ -143,8 +143,16 @@ func ensureDockerAndComposeAvailable() error {
 	return nil
 }
 
+func getComposeFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".apito", "docker-compose.yml"), nil
+}
+
 // dbComposeFilePath returns the path to the database docker-compose file
-func dbComposeFilePath() (string, error) {
+func getDBComposeFilePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -158,7 +166,7 @@ func writeDBComposeFile(engine string) (string, error) {
 		return "", err
 	}
 
-	path, err := dbComposeFilePath()
+	path, err := getDBComposeFilePath()
 	if err != nil {
 		return "", err
 	}
@@ -275,7 +283,7 @@ func writeDBComposeFileWithConfig(engine, dbType string, config DatabaseConfig) 
 		return "", err
 	}
 
-	path, err := dbComposeFilePath()
+	path, err := getDBComposeFilePath()
 	if err != nil {
 		return "", err
 	}
@@ -413,7 +421,7 @@ func writeDBComposeFileWithConfig(engine, dbType string, config DatabaseConfig) 
 
 // removeDatabaseFromCompose removes a specific database service from the compose file
 func removeDatabaseFromCompose(dbType string) error {
-	path, err := dbComposeFilePath()
+	path, err := getDBComposeFilePath()
 	if err != nil {
 		return err
 	}
@@ -470,14 +478,19 @@ func dockerComposeUp() error {
 		return err
 	}
 
-	path, err := dbComposeFilePath()
+	path, err := getComposeFilePath()
 	if err != nil {
 		return err
 	}
 
 	// Check if compose file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return errors.New("no database compose file found")
+		print_warning(fmt.Sprintf("no docker-compose.yml file found. creating it..."))
+		// create it
+		_, err := writeComposeFile()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Try Docker Compose v2 first
@@ -497,7 +510,7 @@ func dockerComposeDown() error {
 		return err
 	}
 
-	path, err := dbComposeFilePath()
+	path, err := getComposeFilePath()
 	if err != nil {
 		return err
 	}
@@ -524,7 +537,7 @@ func dockerComposePs() (bool, bool, error) {
 		return false, false, err
 	}
 
-	path, err := dbComposeFilePath()
+	path, err := getComposeFilePath()
 	if err != nil {
 		return false, false, err
 	}

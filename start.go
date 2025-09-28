@@ -64,76 +64,74 @@ func startApito() {
 		return
 	}
 
-	// Ensure apito is initialized
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		print_error("Unable to determine home directory: " + err.Error())
-		return
-	}
-	apitoDir := filepath.Join(homeDir, ".apito")
-	if _, statErr := os.Stat(apitoDir); os.IsNotExist(statErr) {
-		print_error("Apito is not initialized. Please run: apito init")
-		return
-	}
+	print_status("Run mode: " + mode)
 
-	// Validate critical assets in both modes
-	binDir := filepath.Join(apitoDir, "bin")
-	envFile := filepath.Join(binDir, ".env")
-	engineDataDir := filepath.Join(apitoDir, "engine-data")
-	if _, err := os.Stat(envFile); os.IsNotExist(err) {
-		print_error("Missing ~/.apito/bin/.env. Please run: apito init")
-		return
-	}
-	if _, err := os.Stat(engineDataDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(engineDataDir, 0755); err != nil {
-			print_error("Failed to create engine-data directory: " + err.Error())
+	switch mode {
+	case "manual":
+		// Step 1: Check port availability (interactive) only in manual mode
+		print_status("Step 1: Checking port availability...")
+		// Ensure apito is initialized
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			print_error("Unable to determine home directory: " + err.Error())
 			return
 		}
-	}
+		apitoDir := filepath.Join(homeDir, ".apito")
+		if _, statErr := os.Stat(apitoDir); os.IsNotExist(statErr) {
+			print_error("Apito is not initialized. Please run: apito init")
+			return
+		}
 
-	// Step 1: Check port availability (interactive) only in manual mode
-	print_status("Step 1: Checking port availability...")
-	if mode == "manual" {
+		// Validate critical assets in both modes
+		binDir := filepath.Join(apitoDir, "bin")
+		envFile := filepath.Join(binDir, ".env")
+		engineDataDir := filepath.Join(apitoDir, "engine-data")
+		if _, err := os.Stat(envFile); os.IsNotExist(err) {
+			print_error("Missing ~/.apito/bin/.env. Please run: apito init")
+			return
+		}
+		if _, err := os.Stat(engineDataDir); os.IsNotExist(err) {
+			if err := os.MkdirAll(engineDataDir, 0755); err != nil {
+				print_error("Failed to create engine-data directory: " + err.Error())
+				return
+			}
+		}
+
 		if err := checkPortAvailabilityInteractive(); err != nil {
 			print_warning("Port availability check encountered issues: " + err.Error())
 		}
 		print_success("Port availability check completed")
-	} else {
-		print_status("Docker mode: skipping local port pre-check (Docker will map ports)")
-	}
-	fmt.Println()
 
-	if mode == "manual" {
-		// Step 2: Check and download engine
-		print_status("Step 2: Checking engine binary...")
-		if err := ensureEngineBinary(); err != nil {
-			print_error("Failed to ensure engine binary: " + err.Error())
+		if mode == "manual" {
+			// Step 2: Check and download engine
+			print_status("Step 2: Checking engine binary...")
+			if err := ensureEngineBinary(); err != nil {
+				print_error("Failed to ensure engine binary: " + err.Error())
+				return
+			}
+			print_success("Engine binary ready")
+			fmt.Println()
+		}
+
+		// Step 3: Check if engine is already running
+		print_status("Step 3: Checking if engine is already running...")
+		if running, _, _ := serviceRunning("engine"); running {
+			print_warning("Engine is already running")
+			print_status("Skipping engine startup")
+		} else {
+			print_status("Engine is not running, will start it")
+		}
+		fmt.Println()
+
+		// Step 4: Check and download console
+		print_status("Step 4: Checking console files...")
+		if err := ensureConsoleFiles(); err != nil {
+			print_error("Failed to ensure console files: " + err.Error())
 			return
 		}
-		print_success("Engine binary ready")
+		print_success("Console files ready")
 		fmt.Println()
-	}
 
-	// Step 3: Check if engine is already running
-	print_status("Step 3: Checking if engine is already running...")
-	if running, _, _ := serviceRunning("engine"); running {
-		print_warning("Engine is already running")
-		print_status("Skipping engine startup")
-	} else {
-		print_status("Engine is not running, will start it")
-	}
-	fmt.Println()
-
-	// Step 4: Check and download console
-	print_status("Step 4: Checking console files...")
-	if err := ensureConsoleFiles(); err != nil {
-		print_error("Failed to ensure console files: " + err.Error())
-		return
-	}
-	print_success("Console files ready")
-	fmt.Println()
-
-	if mode == "manual" {
 		// Step 5: Check and install Caddy
 		print_status("Step 5: Checking Caddy installation...")
 		if err := ensureCaddyInstalled(); err != nil {
@@ -142,9 +140,7 @@ func startApito() {
 		}
 		print_success("Caddy ready")
 		fmt.Println()
-	}
 
-	if mode == "manual" {
 		// Step 6: Start engine (if not already running)
 		if running, _, _ := serviceRunning("engine"); !running {
 			print_status("Step 6: Starting engine...")
@@ -155,9 +151,7 @@ func startApito() {
 			print_success("Engine started successfully")
 			fmt.Println()
 		}
-	}
 
-	if mode == "manual" {
 		// Step 7: Start console with Caddy
 		print_status("Step 7: Starting console with Caddy...")
 		if err := setupCaddyfile(); err != nil {
@@ -172,7 +166,10 @@ func startApito() {
 		}
 		print_success("Console started successfully")
 		fmt.Println()
-	} else {
+
+	case "docker":
+		print_status("Docker mode: skipping local port pre-check (Docker will map ports)")
+
 		// Docker mode
 		print_status("Starting services via Docker...")
 		if err := ensureDockerAndComposeAvailable(); err != nil {
@@ -184,7 +181,12 @@ func startApito() {
 			return
 		}
 		print_success("Docker services started (engine:5050, console:4000)")
+
+	default:
+		print_error("Invalid run mode: " + mode)
+		return
 	}
+	fmt.Println()
 
 	print_success("🎉 Apito is now running!")
 	print_status("Engine: http://localhost:5050")
