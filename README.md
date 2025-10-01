@@ -12,6 +12,39 @@
   <a href="https://discord.com/invite/fwHgF8pUpt"><strong>Discord</strong></a>
 </p>
 
+## 📋 Table of Contents
+
+- [🆕 What's New](#-whats-new-in-latest-version)
+- [📦 Installation](#-installation)
+- [🎯 Getting Started](#-getting-started)
+- [📚 Command Reference](#-command-reference)
+  - [🔧 System Management](#-system-management)
+    - [init](#init---initialize-apito-cli-system)
+    - [status](#status---show-service-and-database-status)
+    - [logs](#logs---view-service-and-database-logs)
+  - [🗄️ Database Management](#️-database-management)
+    - [start --db](#start---db---start-database-services)
+    - [stop --db](#stop---db---stop-database-services)
+    - [restart --db](#restart---db---restart-database-services)
+  - [🔌 Plugin Management](#-plugin-management)
+    - [config](#config---manage-cli-configuration)
+    - [account](#account---manage-multiple-accounts)
+    - [plugin](#plugin---manage-hashicorp-plugins)
+  - [📊 Monitoring & Observability](#-monitoring--observability)
+  - [🔧 Project Management](#-project-management)
+  - [🚀 Development & Execution](#-development--execution)
+    - [start](#start---start-apito-engine-and-console)
+    - [stop](#stop---stop-services)
+    - [restart](#restart---restart-services)
+  - [🏗️ Building & Packaging](#️-building--packaging)
+  - [🔄 Updates & Maintenance](#-updates--maintenance)
+- [🗂️ Project Structure](#️-project-structure)
+- [⚙️ Configuration](#️-configuration)
+- [🚨 Troubleshooting](#-troubleshooting)
+- [🔗 Useful Links](#-useful-links)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
 <p align="center">
   <a href="https://github.com/apito-io/engine/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
@@ -546,6 +579,13 @@ apito plugin list
 
 Create, deploy, update, and manage HashiCorp-based plugins with hot reload capabilities.
 
+**⚠️ Confirmation Required**: Sensitive operations (`deploy`, `update`, `delete`, `stop`, `restart`) require confirmation and will display detailed information about the operation, including:
+
+- Action being performed
+- Plugin ID and version
+- Target account and server URL
+- Additional plugin details (language, type)
+
 **Usage:**
 
 ```bash
@@ -556,15 +596,20 @@ apito plugin <command> [options]
 
 - `create` - Create a new plugin scaffold
 - `build [directory]` - Build plugin based on language configuration
-- `deploy [directory]` - Deploy plugin to server
-- `update <plugin-id> [directory]` - Update existing plugin
+- `deploy [directory]` - Deploy plugin to server ⚠️ _Requires confirmation_
+- `update <plugin-id> [directory]` - Update existing plugin ⚠️ _Requires confirmation_
 - `list` - List all plugins on server
 - `status <plugin-id>` - Get plugin status
-- `delete <plugin-id>` - Delete plugin from server
-- `restart <plugin-id>` - Restart plugin
-- `stop <plugin-id>` - Stop plugin
+- `delete <plugin-id>` - Delete plugin from server ⚠️ _Requires confirmation_
+- `restart <plugin-id>` - Restart plugin ⚠️ _Requires confirmation_
+- `stop <plugin-id>` - Stop plugin ⚠️ _Requires confirmation_
 - `start <plugin-id>` - Start plugin
 - `env` - Show build environment information
+
+**Options:**
+
+- `--account, -a` - Specify account to use for plugin operations (optional, uses default if not specified)
+- `--dir, -d` - Plugin directory (for deploy/update commands)
 
 **Features:**
 
@@ -574,6 +619,7 @@ apito plugin <command> [options]
 - **Secure Deployment**: Cloud sync key authentication
 - **Real-time Status**: Live plugin status monitoring and health checks
 - **Template Generation**: Scaffold creation with best practices
+- **Confirmation System**: Sensitive operations require explicit confirmation with detailed operation information
 
 **Plugin Creation Workflow:**
 
@@ -626,14 +672,25 @@ apito plugin build
 # > Choose build method: System Go / Docker
 # > (For Go) Choose build type: Debug / Development / Production
 
-# Deploy from current directory
+# Deploy from current directory (requires confirmation)
 apito plugin deploy
 
 # Deploy from specific directory
 apito plugin deploy ./path/to/plugin
 
-# Update existing plugin
+# Deploy to specific account
+apito plugin deploy --account staging
+apito plugin deploy -a production
+
+# Update existing plugin (requires confirmation)
 apito plugin update hc-file-processor
+
+# List plugins from specific account
+apito plugin list --account staging
+apito plugin list -a production
+
+# Check plugin status from specific account
+apito plugin status hc-file-processor --account staging
 ```
 
 **Plugin Build System:**
@@ -699,12 +756,12 @@ apito plugin list
 # Get detailed plugin status
 apito plugin status hc-file-processor
 
-# Control plugin lifecycle
+# Control plugin lifecycle (requires confirmation)
 apito plugin restart hc-file-processor
 apito plugin stop hc-file-processor
 apito plugin start hc-file-processor
 
-# Remove plugin
+# Remove plugin (requires confirmation)
 apito plugin delete hc-file-processor
 ```
 
@@ -1347,10 +1404,14 @@ apito plugin start <plugin-id>      # Start plugin fresh
 
 # Account switching for different environments
 apito account test staging          # Test staging account first
+apito plugin deploy --account staging  # Deploy to staging (requires confirmation)
+apito plugin deploy -a production      # Deploy to production (requires confirmation)
+
+# Or switch default account
 apito account select staging        # Switch to staging account
-apito plugin deploy                 # Deploy to staging
-apito account test production       # Test production account
+apito plugin deploy                 # Deploy to staging (uses default, requires confirmation)
 apito account select production     # Switch back to production
+apito plugin deploy                 # Deploy to production (uses default, requires confirmation)
 
 # Plugin logs (server-side)
 # Check your Apito server logs for plugin-specific errors

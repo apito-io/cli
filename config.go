@@ -183,12 +183,16 @@ var configSetCmd = &cobra.Command{
 		if len(args) >= 4 && strings.ToLower(args[0]) == "account" {
 			// Handle: apito config set account <account-name> <url|key> <value>
 			setAccountConfigValue(args[1], args[2], args[3])
+		} else if len(args) == 3 {
+			// Handle: apito config set <account-name> <url|key> <value>
+			setAccountConfigValue(args[0], args[1], args[2])
 		} else if len(args) == 2 {
 			// Handle legacy format: apito config set <key> <value>
 			setConfigValue(args[0], args[1])
 		} else {
 			print_error("Invalid arguments. Use:")
 			print_status("  apito config set <key> <value>")
+			print_status("  apito config set <account-name> <url|key> <value>")
 			print_status("  apito config set account <account-name> <url|key> <value>")
 		}
 	},

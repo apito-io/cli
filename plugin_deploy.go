@@ -52,7 +52,10 @@ var pluginDeployCmd = &cobra.Command{
 		if pluginDir == "" {
 			pluginDir = "."
 		}
-		deployPlugin(pluginDir)
+
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		deployPlugin(pluginDir, accountName)
 	},
 }
 
@@ -70,7 +73,10 @@ var pluginUpdateCmd = &cobra.Command{
 		if pluginDir == "" {
 			pluginDir = "."
 		}
-		updatePlugin(pluginDir)
+
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		updatePlugin(pluginDir, accountName)
 	},
 }
 
@@ -79,7 +85,9 @@ var pluginListCmd = &cobra.Command{
 	Short: "List all plugins on the server",
 	Long:  `List all plugins and their status on the configured Apito server`,
 	Run: func(cmd *cobra.Command, args []string) {
-		listPlugins()
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		listPlugins(accountName)
 	},
 }
 
@@ -89,7 +97,9 @@ var pluginStatusCmd = &cobra.Command{
 	Long:  `Get detailed status information for a specific plugin`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		getPluginStatus(args[0])
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		getPluginStatus(args[0], accountName)
 	},
 }
 
@@ -99,7 +109,9 @@ var pluginRestartCmd = &cobra.Command{
 	Long:  `Restart a specific plugin on the server`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		restartPlugin(args[0])
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		restartPlugin(args[0], accountName)
 	},
 }
 
@@ -109,7 +121,9 @@ var pluginStopCmd = &cobra.Command{
 	Long:  `Stop a specific plugin on the server`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		stopPlugin(args[0])
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		stopPlugin(args[0], accountName)
 	},
 }
 
@@ -119,7 +133,9 @@ var pluginDeleteCmd = &cobra.Command{
 	Long:  `Delete a specific plugin from the server`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		deletePlugin(args[0])
+		// Get account name from flag
+		accountName, _ := cmd.Flags().GetString("account")
+		deletePlugin(args[0], accountName)
 	},
 }
 
@@ -183,6 +199,15 @@ func init() {
 	// Add --dir flags to commands that accept plugin directories
 	pluginDeployCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
 	pluginUpdateCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
+
+	// Add --account flags to all plugin commands
+	pluginDeployCmd.Flags().StringP("account", "a", "", "Account to use for deployment")
+	pluginUpdateCmd.Flags().StringP("account", "a", "", "Account to use for update")
+	pluginListCmd.Flags().StringP("account", "a", "", "Account to use for listing")
+	pluginStatusCmd.Flags().StringP("account", "a", "", "Account to use for status check")
+	pluginRestartCmd.Flags().StringP("account", "a", "", "Account to use for restart")
+	pluginStopCmd.Flags().StringP("account", "a", "", "Account to use for stop")
+	pluginDeleteCmd.Flags().StringP("account", "a", "", "Account to use for deletion")
 
 	// Add plugin commands to plugin group
 	pluginCmd.AddCommand(pluginCreateCmd)
@@ -261,12 +286,10 @@ func createPluginScaffold() {
 	print_status("4. Deploy: apito plugin deploy")
 }
 
-func deployPlugin(pluginDir string) {
-	if !checkServerConfig() {
+func deployPlugin(pluginDir, accountName string) {
+	if !checkServerConfig(accountName) {
 		return
 	}
-
-	print_step("🚀 Deploying Plugin")
 
 	// Load plugin configuration
 	config, err := readPluginConfig(pluginDir)
@@ -276,6 +299,16 @@ func deployPlugin(pluginDir string) {
 	}
 
 	pluginID := config.Plugin.ID
+
+	// Ask for confirmation before deployment
+	if !confirmSensitiveOperation("deploy", pluginID, accountName,
+		fmt.Sprintf("Version: %s", config.Plugin.Version),
+		fmt.Sprintf("Language: %s", config.Plugin.Language),
+		fmt.Sprintf("Type: %s", config.Plugin.Type)) {
+		return
+	}
+
+	print_step("🚀 Deploying Plugin")
 	print_status(fmt.Sprintf("Deploying plugin: %s (version: %s)", pluginID, config.Plugin.Version))
 
 	// Note: Build plugin separately using 'apito plugin build' before deployment
@@ -290,7 +323,7 @@ func deployPlugin(pluginDir string) {
 	defer os.Remove(packagePath) // Clean up
 
 	// Deploy to server (includes platform validation)
-	response, err := deployToServer(packagePath, config, false, pluginDir)
+	response, err := deployToServer(packagePath, config, false, pluginDir, accountName)
 	if err != nil {
 		print_error("Failed to deploy plugin: " + err.Error())
 		return
@@ -307,12 +340,10 @@ func deployPlugin(pluginDir string) {
 	}
 }
 
-func updatePlugin(pluginDir string) {
-	if !checkServerConfig() {
+func updatePlugin(pluginDir, accountName string) {
+	if !checkServerConfig(accountName) {
 		return
 	}
-
-	print_step("🔄 Updating Plugin")
 
 	// Load plugin configuration
 	config, err := readPluginConfig(pluginDir)
@@ -322,6 +353,16 @@ func updatePlugin(pluginDir string) {
 	}
 
 	pluginID := config.Plugin.ID
+
+	// Ask for confirmation before update
+	if !confirmSensitiveOperation("update", pluginID, accountName,
+		fmt.Sprintf("Version: %s", config.Plugin.Version),
+		fmt.Sprintf("Language: %s", config.Plugin.Language),
+		fmt.Sprintf("Type: %s", config.Plugin.Type)) {
+		return
+	}
+
+	print_step("🔄 Updating Plugin")
 	print_status(fmt.Sprintf("Updating plugin: %s (version: %s)", pluginID, config.Plugin.Version))
 
 	// Note: Build plugin separately using 'apito plugin build' before update
@@ -336,7 +377,7 @@ func updatePlugin(pluginDir string) {
 	defer os.Remove(packagePath)
 
 	// Deploy to server (update mode, includes platform validation)
-	response, err := deployToServer(packagePath, config, true, pluginDir)
+	response, err := deployToServer(packagePath, config, true, pluginDir, accountName)
 	if err != nil {
 		print_error("Failed to update plugin: " + err.Error())
 		return
@@ -353,14 +394,14 @@ func updatePlugin(pluginDir string) {
 	}
 }
 
-func listPlugins() {
-	if !checkServerConfig() {
+func listPlugins(accountName string) {
+	if !checkServerConfig(accountName) {
 		return
 	}
 
 	print_step("📋 Listing Plugins")
 
-	account, err := getAccountConfig("")
+	account, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Failed to get account configuration: " + err.Error())
 		return
@@ -432,14 +473,14 @@ func listPlugins() {
 	}
 }
 
-func getPluginStatus(pluginID string) {
-	if !checkServerConfig() {
+func getPluginStatus(pluginID, accountName string) {
+	if !checkServerConfig(accountName) {
 		return
 	}
 
 	print_step(fmt.Sprintf("🔍 Plugin Status: %s", pluginID))
 
-	account, err := getAccountConfig("")
+	account, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Failed to get account configuration: " + err.Error())
 		return
@@ -513,34 +554,27 @@ func getPluginStatus(pluginID string) {
 	}
 }
 
-func restartPlugin(pluginID string) {
-	controlPlugin(pluginID, "restart")
+func restartPlugin(pluginID, accountName string) {
+	controlPlugin(pluginID, "restart", accountName)
 }
 
-func stopPlugin(pluginID string) {
-	controlPlugin(pluginID, "stop")
+func stopPlugin(pluginID, accountName string) {
+	controlPlugin(pluginID, "stop", accountName)
 }
 
-func deletePlugin(pluginID string) {
-	if !checkServerConfig() {
+func deletePlugin(pluginID, accountName string) {
+	if !checkServerConfig(accountName) {
 		return
 	}
 
-	// Confirmation prompt
-	confirmPrompt := promptui.Prompt{
-		Label:     fmt.Sprintf("Are you sure you want to delete plugin '%s'? This cannot be undone (y/N)", pluginID),
-		IsConfirm: true,
-		Default:   "n",
-	}
-
-	if _, err := confirmPrompt.Run(); err != nil {
-		print_status("Deletion cancelled")
+	// Ask for confirmation before deletion
+	if !confirmSensitiveOperation("delete", pluginID, accountName) {
 		return
 	}
 
 	print_step(fmt.Sprintf("🗑️  Deleting Plugin: %s", pluginID))
 
-	account, err := getAccountConfig("")
+	account, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Failed to get account configuration: " + err.Error())
 		return
@@ -583,14 +617,88 @@ func deletePlugin(pluginID string) {
 
 // Helper functions
 
-func controlPlugin(pluginID, action string) {
-	if !checkServerConfig() {
+// confirmSensitiveOperation asks for confirmation before performing sensitive operations
+func confirmSensitiveOperation(operation, pluginID, accountName string, pluginInfo ...string) bool {
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		print_error("Failed to load configuration: " + err.Error())
+		return false
+	}
+
+	// Get account info
+	var account AccountConfig
+	var actualAccountName string
+	if accountName != "" {
+		if acc, exists := cfg.Accounts[accountName]; exists {
+			account = acc
+			actualAccountName = accountName
+		} else {
+			print_error(fmt.Sprintf("Account '%s' does not exist", accountName))
+			return false
+		}
+	} else {
+		// Use default account
+		if cfg.DefaultAccount != "" {
+			if acc, exists := cfg.Accounts[cfg.DefaultAccount]; exists {
+				account = acc
+				actualAccountName = cfg.DefaultAccount
+			}
+		}
+	}
+
+	// Display operation details
+	print_step(fmt.Sprintf("⚠️  Confirmation Required: %s", strings.Title(operation)))
+	print_status("")
+	print_status("Operation Details:")
+	print_status(fmt.Sprintf("  Action: %s", strings.Title(operation)))
+	print_status(fmt.Sprintf("  Plugin: %s", pluginID))
+
+	// Show account info
+	if actualAccountName != "" {
+		print_status(fmt.Sprintf("  Account: %s", actualAccountName))
+		print_status(fmt.Sprintf("  Server: %s", account.ServerURL))
+	} else {
+		print_status("  Account: (default - none set)")
+	}
+
+	// Show additional plugin info if provided
+	if len(pluginInfo) > 0 {
+		for _, info := range pluginInfo {
+			print_status(fmt.Sprintf("  %s", info))
+		}
+	}
+
+	print_status("")
+	print_warning("This operation cannot be undone!")
+
+	// Confirmation prompt
+	confirmPrompt := promptui.Prompt{
+		Label:     fmt.Sprintf("Are you sure you want to %s plugin '%s'? (y/N)", operation, pluginID),
+		IsConfirm: true,
+		Default:   "n",
+	}
+
+	if _, err := confirmPrompt.Run(); err != nil {
+		print_status("Operation cancelled")
+		return false
+	}
+
+	return true
+}
+
+func controlPlugin(pluginID, action, accountName string) {
+	if !checkServerConfig(accountName) {
+		return
+	}
+
+	// Ask for confirmation before control operations
+	if !confirmSensitiveOperation(action, pluginID, accountName) {
 		return
 	}
 
 	print_step(fmt.Sprintf("🎛️  %s Plugin: %s", strings.Title(action), pluginID))
 
-	account, err := getAccountConfig("")
+	account, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Failed to get account configuration: " + err.Error())
 		return
@@ -631,9 +739,9 @@ func controlPlugin(pluginID, action string) {
 	}
 }
 
-func checkServerConfig() bool {
+func checkServerConfig(accountName string) bool {
 	// Get account configuration
-	_, err := getAccountConfig("")
+	_, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Account configuration error: " + err.Error())
 		return false
@@ -933,8 +1041,8 @@ func validatePlatformCompatibility(pluginDir string, config *PluginConfig, serve
 	return nil
 }
 
-func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, pluginDir string) (*PluginOperationResponse, error) {
-	account, err := getAccountConfig("")
+func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, pluginDir, accountName string) (*PluginOperationResponse, error) {
+	account, err := getAccountConfig(accountName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get account configuration: %w", err)
 	}
