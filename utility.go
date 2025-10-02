@@ -106,30 +106,29 @@ func getConfig(projectDir string) (map[string]string, error) {
 }
 
 // saveConfig saves configuration to a project directory (deprecated, use WriteEnv instead)
-func saveConfig(projectDir string, config map[string]string) error {
-	// For backward compatibility, if the path contains "bin", use WriteEnv
-	if strings.Contains(projectDir, "bin") {
-		return WriteEnv(config)
+func saveConfig(fileDir string, config map[string]string) error {
+	// Always use WriteEnv for consistency - it handles both bin and project directories correctly
+	configFile := filepath.Join(fileDir, ConfigFile)
+	
+	// Ensure the directory exists
+	if err := os.MkdirAll(fileDir, 0755); err != nil {
+		return fmt.Errorf("error creating directory: %w", err)
 	}
 
-	// Otherwise, use the old method for project-specific configs
-	configFile := filepath.Join(projectDir, ConfigFile)
-
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		_, err := os.Create(configFile)
-		if err != nil {
-			return fmt.Errorf("error creating config file: %w", err)
-		}
-	}
-
-	f, err := os.Open(configFile)
+	// Read existing config to preserve other variables
+	existingConfig, err := godotenv.Read(configFile)
 	if err != nil {
-		return fmt.Errorf("error creating config file: %w", err)
+		// If file doesn't exist, start with empty config
+		existingConfig = make(map[string]string)
 	}
-	defer f.Close()
 
-	// write the config to the file
-	if err := godotenv.Write(config, configFile); err != nil {
+	// Merge new config with existing config
+	for k, v := range config {
+		existingConfig[k] = v
+	}
+
+	// Write the merged config to the file
+	if err := godotenv.Write(existingConfig, configFile); err != nil {
 		return fmt.Errorf("error writing config file: %w", err)
 	}
 
