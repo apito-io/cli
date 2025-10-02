@@ -240,8 +240,8 @@ func validateEnvironmentConfig() error {
 		config["BRANKA_KEY"] = generateBrankaKey()
 		print_success("BRANKA_KEY generated successfully")
 
-		// Save the generated key
-		if err := saveConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+		// Save the generated key to the same location we read from (bin directory)
+		if err := saveConfig(filepath.Join(homeDir, ".apito", "bin"), config); err != nil {
 			return fmt.Errorf("error saving generated BRANKA_KEY: %w", err)
 		}
 	}

@@ -106,12 +106,17 @@ func getConfig(projectDir string) (map[string]string, error) {
 }
 
 // saveConfig saves configuration to a project directory (deprecated, use WriteEnv instead)
-func saveConfig(fileDir string, config map[string]string) error {
-	// Always use WriteEnv for consistency - it handles both bin and project directories correctly
-	configFile := filepath.Join(fileDir, ConfigFile)
+func saveConfig(projectDir string, config map[string]string) error {
+	// For backward compatibility, if the path contains "bin", use WriteEnv
+	if strings.Contains(projectDir, "bin") {
+		return WriteEnv(config)
+	}
+
+	// Otherwise, use the old method for project-specific configs
+	configFile := filepath.Join(projectDir, ConfigFile)
 	
 	// Ensure the directory exists
-	if err := os.MkdirAll(fileDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return fmt.Errorf("error creating directory: %w", err)
 	}
 
