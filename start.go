@@ -464,7 +464,7 @@ func ensureCaddyInstalled() error {
 		print_status("Caddy is already installed")
 		// Persist discovered path for future use
 		if homeDir, herr := os.UserHomeDir(); herr == nil {
-			_ = updateConfig(filepath.Join(homeDir, ".apito", "bin"), "CADDY_PATH", foundPath)
+			_ = updateEnvConfig(filepath.Join(homeDir, ".apito", "bin"), "CADDY_PATH", foundPath)
 		}
 		return nil
 	}
@@ -485,7 +485,7 @@ func ensureCaddyInstalled() error {
 
 	// Save installed path to config for later use
 	if homeDir, herr := os.UserHomeDir(); herr == nil {
-		_ = updateConfig(filepath.Join(homeDir, ".apito", "bin"), "CADDY_PATH", installedPath)
+		_ = updateEnvConfig(filepath.Join(homeDir, ".apito", "bin"), "CADDY_PATH", installedPath)
 	}
 
 	return nil

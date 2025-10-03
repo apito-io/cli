@@ -139,28 +139,36 @@ func ensureSystemConfig() error {
 
 		// Create default configuration
 		defaultConfig := map[string]string{
-			"ENVIRONMENT":             "local",
-			"COOKIE_DOMAIN":           "localhost",
-			"CORS_ORIGIN":             "http://localhost:4000",
-			"PLUGIN_PATH":             "plugins",
-			"PUBLIC_KEY_PATH":         "keys/public.key",
-			"PRIVATE_KEY_PATH":        "keys/private.key",
-			"BRANKA_KEY":              "",
-			"APITO_SYSTEM_DB_ENGINE":  "coreDB",
-			"SYSTEM_DB_HOST":          "",
-			"SYSTEM_DB_PORT":          "",
-			"SYSTEM_DB_USER":          "",
-			"SYSTEM_DB_PASSWORD":      "",
-			"SYSTEM_DB_NAME":          "~/.apito/engine-data/apito_system.db",
-			"SERVE_PORT":              "5050",
-			"CACHE_DRIVER":            "memory",
-			"CACHE_TTL":               "600",
-			"KV_ENGINE":               "coreDB",
-			"AUTH_SERVICE_PROVIDER":   "local",
-			"TOKEN_TTL":               "60",
+			"ENVIRONMENT": "local",
+			"AUTH_SERVICE_PROVIDER": "local",
+			"BRANKA_KEY": "",
+			"COOKIE_DOMAIN": "localhost",
+			"CORS_ORIGIN": "http://localhost:4000",
+			"PLUGIN_PATH": "plugins",
+			"PRIVATE_KEY_PATH": "keys/private.key",
+			"PUBLIC_KEY_PATH": "keys/public.key",
+			"SERVE_PORT": "5050",
+			"TOKEN_TTL": "60",
+
+			"CACHE_DRIVER": "memory",
+			"CACHE_TTL": "600",
+
+			"KV_ENGINE": "coreDB",
+			"KV_DATABASE": "~/.apito/engine-data/apito_kv.db",
+
+			"QUEUE_ENGINE": "coreDB",
+			"QUEUE_DATABASE": "~/.apito/engine-data/apito_queue.db",
+
+			"SYSTEM_DB_ENGINE": "coreDB",
+			"SYSTEM_DB_NAME": "~/.apito/engine-data/apito_system.db",
+
+			"PROJECT_DB_ENGINE": "coreDB",
+			"PROJECT_DB_NAME": "~/.apito/engine-data/apito_project.db",
+
+			"DEFAULT_SAAS_PROJECT_DB_NAME": "~/.apito/engine-data/apito_saas_project.db",
 		}
 
-		if err := saveConfig(apitoBinDir, defaultConfig); err != nil {
+		if err := saveEnvConfig(apitoBinDir, defaultConfig); err != nil {
 			return fmt.Errorf("error creating system config: %w", err)
 		}
 		print_success("System configuration file created")
@@ -241,7 +249,7 @@ func validateEnvironmentConfig() error {
 		print_success("BRANKA_KEY generated successfully")
 
 		// Save the generated key to the same location we read from (bin directory)
-		if err := saveConfig(filepath.Join(homeDir, ".apito", "bin"), config); err != nil {
+		if err := saveEnvConfig(filepath.Join(homeDir, ".apito", "bin"), config); err != nil {
 			return fmt.Errorf("error saving generated BRANKA_KEY: %w", err)
 		}
 	}
@@ -323,7 +331,7 @@ func promptForDatabaseConfig(config map[string]string, prefix string) error {
 		return fmt.Errorf("error finding home directory: %w", err)
 	}
 
-	if err := saveConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+	if err := saveEnvConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
 		return fmt.Errorf("error saving configuration: %w", err)
 	}
 
@@ -381,7 +389,7 @@ func promptForEnvironmentConfig(config map[string]string) error {
 		return fmt.Errorf("error finding home directory: %w", err)
 	}
 
-	if err := saveConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+	if err := saveEnvConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
 		return fmt.Errorf("error saving configuration: %w", err)
 	}
 

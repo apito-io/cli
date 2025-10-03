@@ -106,7 +106,7 @@ func getConfig(projectDir string) (map[string]string, error) {
 }
 
 // saveConfig saves configuration to a project directory (deprecated, use WriteEnv instead)
-func saveConfig(projectDir string, config map[string]string) error {
+func saveEnvConfig(projectDir string, config map[string]string) error {
 	// For backward compatibility, if the path contains "bin", use WriteEnv
 	if strings.Contains(projectDir, "bin") {
 		return WriteEnv(config)
@@ -114,7 +114,7 @@ func saveConfig(projectDir string, config map[string]string) error {
 
 	// Otherwise, use the old method for project-specific configs
 	configFile := filepath.Join(projectDir, ConfigFile)
-	
+
 	// Ensure the directory exists
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return fmt.Errorf("error creating directory: %w", err)
@@ -141,7 +141,7 @@ func saveConfig(projectDir string, config map[string]string) error {
 }
 
 // updateConfig updates a single configuration value in a project directory
-func updateConfig(projectDir, key, value string) error {
+func updateEnvConfig(projectDir, key, value string) error {
 	envMap, err := getConfig(projectDir)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %w", err)
@@ -150,7 +150,7 @@ func updateConfig(projectDir, key, value string) error {
 	envMap[key] = value
 
 	// write back to config file
-	if err := saveConfig(projectDir, envMap); err != nil {
+	if err := saveEnvConfig(projectDir, envMap); err != nil {
 		return fmt.Errorf("error saving config file: %w", err)
 	}
 
