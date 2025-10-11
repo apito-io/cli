@@ -462,6 +462,8 @@ apito config <command> [options]
 **Commands:**
 
 - `set <key> <value>` - Set a configuration value
+- `set <url|key> <value>` - Set account-specific configuration with interactive selection
+- `set -a <account> <url|key> <value>` - Set account-specific configuration with account flag
 - `set account <account-name> <url|key> <value>` - Set account-specific configuration
 - `get [key]` - Get configuration value(s)
 - `init` - Initialize configuration interactively
@@ -479,17 +481,45 @@ apito config <command> [options]
 - `url` - Apito server URL for the account
 - `key` - Cloud sync key for the account
 
+**Interactive Account Selection:**
+
+When setting `url` or `key` without specifying an account, the CLI will show an interactive menu to choose from configured accounts:
+
+```bash
+# Interactive account selection (shows list of accounts)
+apito config set key AQAAAABo3Wov1s_uv6RndWxE...
+# Output:
+# 📋 Select Account
+# 1. local (default)
+# 2. staging
+# 3. production
+# ? Choose account: [Use arrows to select]
+
+# Direct account specification with flag
+apito config set -a production key abc123...
+apito config set --account staging url https://staging-api.apito.io
+
+# Auto-selects if only one account exists
+# Shows error if no accounts configured
+```
+
 **Examples:**
 
 ```bash
 # Interactive configuration setup (creates accounts)
 apito config init
 
-# Set account-specific server URL
-apito config set account production url https://api.apito.io
+# Interactive account selection for setting values
+apito config set key abc123...        # Shows account selection menu
+apito config set url https://api.apito.io  # Shows account selection menu
 
-# Set account-specific cloud sync key
-apito config set account production key abc123...
+# Set account-specific values with -a flag (recommended)
+apito config set -a production key abc123...
+apito config set -a staging url https://staging-api.apito.io
+
+# Set account-specific values (existing patterns still work)
+apito config set account production url https://api.apito.io
+apito config set production key abc123...
 
 # Set default account
 apito config set default_account production
@@ -552,15 +582,25 @@ apito account create production
 apito account create staging
 apito account create local
 
-# 2. Configure each account
+# 2. Configure each account (multiple ways)
+
+# Method A: Using -a flag (recommended)
+apito config set -a production url https://api.apito.io
+apito config set -a production key prod-key-123
+
+apito config set -a staging url https://staging-api.apito.io
+apito config set -a staging key staging-key-456
+
+apito config set -a local url http://localhost:5050
+apito config set -a local key local-key-789
+
+# Method B: Interactive selection (shows menu)
+apito config set url https://api.apito.io  # Select from account list
+apito config set key prod-key-123          # Select from account list
+
+# Method C: Traditional syntax (still works)
 apito config set account production url https://api.apito.io
-apito config set account production key prod-key-123
-
-apito config set account staging url https://staging-api.apito.io
-apito config set account staging key staging-key-456
-
-apito config set account local url http://localhost:5050
-apito config set account local key local-key-789
+apito config set production key prod-key-123
 
 # 3. Test account connections
 apito account test production
@@ -1142,10 +1182,32 @@ The CLI manages two types of configuration:
 - `default_account` - Default account for plugin operations
 - `timeout` - Request timeout in seconds (default: 30)
 - `default_plugin` - Default plugin for operations
-- `accounts` - Account configurations map
+- `accounts` - Account configurations map (supports multiple accounts)
   - `account_name` - Account configuration
     - `server_url` - Apito server URL for the account
     - `cloud_sync_key` - Authentication key for the account
+
+**Setting Account Configuration:**
+
+You can configure accounts using three methods:
+
+1. **Interactive Selection** (recommended for beginners):
+   ```bash
+   apito config set key <value>  # Shows account selection menu
+   apito config set url <value>  # Shows account selection menu
+   ```
+
+2. **Using -a Flag** (recommended for scripts):
+   ```bash
+   apito config set -a production key <value>
+   apito config set -a staging url <value>
+   ```
+
+3. **Traditional Syntax** (still supported):
+   ```bash
+   apito config set account production url <value>
+   apito config set production key <value>
+   ```
 
 #### **Engine Configuration (`~/.apito/bin/.env`)**
 
@@ -1343,8 +1405,14 @@ apito plugin status <plugin-id>     # Check specific plugin status
 apito account create <name>          # Create new account
 apito account test <name>            # Test account connection
 apito account select <name>          # Set default account
-apito config set account <name> url <url>  # Set account URL
-apito config set account <name> key <key>  # Set account key
+
+# Set account configuration (multiple methods)
+apito config set -a <name> url <url>     # Using -a flag (recommended)
+apito config set -a <name> key <key>     # Using -a flag (recommended)
+apito config set url <url>               # Interactive selection
+apito config set key <key>               # Interactive selection
+apito config set account <name> url <url>  # Traditional syntax
+apito config set <name> key <key>          # Traditional syntax
 
 # Plugin server connection issues
 curl -H "Authorization: Bearer <sync-key>" \
