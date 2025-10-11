@@ -180,6 +180,9 @@ var configSetCmd = &cobra.Command{
 	Long:  `Set a configuration value (timeout, mode, default_account) or account-specific values`,
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Get account flag
+		accountFlag, _ := cmd.Flags().GetString("account")
+		
 		if len(args) >= 4 && strings.ToLower(args[0]) == "account" {
 			// Handle: apito config set account <account-name> <url|key> <value>
 			setAccountConfigValue(args[1], args[2], args[3])
@@ -187,13 +190,28 @@ var configSetCmd = &cobra.Command{
 			// Handle: apito config set <account-name> <url|key> <value>
 			setAccountConfigValue(args[0], args[1], args[2])
 		} else if len(args) == 2 {
-			// Handle legacy format: apito config set <key> <value>
-			setConfigValue(args[0], args[1])
+			// Check if this looks like account configuration (url or key)
+			if args[0] == "url" || args[0] == "key" {
+				// Handle: apito config set url <value> or apito config set key <value>
+				accountName := accountFlag
+				if accountName == "" {
+					accountName = selectAccountInteractively()
+					if accountName == "" {
+						return // User cancelled
+					}
+				}
+				setAccountConfigValue(accountName, args[0], args[1])
+			} else {
+				// Handle legacy format: apito config set <key> <value>
+				setConfigValue(args[0], args[1])
+			}
 		} else {
 			print_error("Invalid arguments. Use:")
 			print_status("  apito config set <key> <value>")
 			print_status("  apito config set <account-name> <url|key> <value>")
 			print_status("  apito config set account <account-name> <url|key> <value>")
+			print_status("  apito config set -a <account> url <value>")
+			print_status("  apito config set -a <account> key <value>")
 		}
 	},
 }
@@ -287,6 +305,9 @@ var accountTestCmd = &cobra.Command{
 }
 
 func init() {
+	// Add flags to config commands
+	configSetCmd.Flags().StringP("account", "a", "", "Account name for setting url/key")
+
 	// Add config commands
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configGetCmd)
@@ -944,6 +965,55 @@ func getAccountNames(cfg *CLIConfig) []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// selectAccountInteractively allows user to select an account from available accounts
+func selectAccountInteractively() string {
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		print_error("Failed to load configuration: " + err.Error())
+		return ""
+	}
+
+	if len(cfg.Accounts) == 0 {
+		print_error("No accounts configured. Create one with: apito account create <name>")
+		return ""
+	}
+
+	if len(cfg.Accounts) == 1 {
+		// If only one account, use it automatically
+		for name := range cfg.Accounts {
+			print_status(fmt.Sprintf("Using only available account: %s", name))
+			return name
+		}
+	}
+
+	// Show account selection
+	accountNames := getAccountNames(cfg)
+	
+	print_step("📋 Select Account")
+	for i, name := range accountNames {
+		defaultMarker := ""
+		if name == cfg.DefaultAccount {
+			defaultMarker = " (default)"
+		}
+		print_status(fmt.Sprintf("%d. %s%s", i+1, name, defaultMarker))
+	}
+
+	selector := promptui.Select{
+		Label: "Choose account",
+		Items: accountNames,
+		Size:  len(accountNames),
+	}
+
+	_, selectedAccount, err := selector.Run()
+	if err != nil {
+		print_error("Account selection cancelled")
+		return ""
+	}
+
+	print_status(fmt.Sprintf("Selected account: %s", selectedAccount))
+	return selectedAccount
 }
 
 // Helper function to get account configuration for plugin operations
