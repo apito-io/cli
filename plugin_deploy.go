@@ -507,11 +507,11 @@ func listPlugins(accountName string) {
 
 	// Display results
 	if len(response.Plugins) == 0 {
-		print_status("No plugins found")
+		print_status(fmt.Sprintf("No plugins found in account '%s'", accountName))
 		return
 	}
 
-	print_success(fmt.Sprintf("Found %d plugins:", len(response.Plugins)))
+	print_success(fmt.Sprintf("Found %d plugins in account '%s':", len(response.Plugins), accountName))
 	for _, plugin := range response.Plugins {
 		status := plugin.Status
 		if plugin.Error != "" {
