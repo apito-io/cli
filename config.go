@@ -182,7 +182,7 @@ var configSetCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account flag
 		accountFlag, _ := cmd.Flags().GetString("account")
-		
+
 		if len(args) >= 4 && strings.ToLower(args[0]) == "account" {
 			// Handle: apito config set account <account-name> <url|key> <value>
 			setAccountConfigValue(args[1], args[2], args[3])
@@ -990,7 +990,7 @@ func selectAccountInteractively() string {
 
 	// Show account selection
 	accountNames := getAccountNames(cfg)
-	
+
 	print_step("📋 Select Account")
 	for i, name := range accountNames {
 		defaultMarker := ""

@@ -1192,12 +1192,14 @@ The CLI manages two types of configuration:
 You can configure accounts using three methods:
 
 1. **Interactive Selection** (recommended for beginners):
+
    ```bash
    apito config set key <value>  # Shows account selection menu
    apito config set url <value>  # Shows account selection menu
    ```
 
 2. **Using -a Flag** (recommended for scripts):
+
    ```bash
    apito config set -a production key <value>
    apito config set -a staging url <value>
