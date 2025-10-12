@@ -55,7 +55,7 @@ var pluginDeployCmd = &cobra.Command{
 
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -63,7 +63,7 @@ var pluginDeployCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		deployPlugin(pluginDir, accountName)
 	},
 }
@@ -85,7 +85,7 @@ var pluginUpdateCmd = &cobra.Command{
 
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -93,7 +93,7 @@ var pluginUpdateCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		updatePlugin(pluginDir, accountName)
 	},
 }
@@ -105,7 +105,7 @@ var pluginListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -113,7 +113,7 @@ var pluginListCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		listPlugins(accountName)
 	},
 }
@@ -126,7 +126,7 @@ var pluginStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -134,7 +134,7 @@ var pluginStatusCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		getPluginStatus(args[0], accountName)
 	},
 }
@@ -147,7 +147,7 @@ var pluginRestartCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -155,7 +155,7 @@ var pluginRestartCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		restartPlugin(args[0], accountName)
 	},
 }
@@ -168,7 +168,7 @@ var pluginStopCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -176,7 +176,7 @@ var pluginStopCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		stopPlugin(args[0], accountName)
 	},
 }
@@ -189,7 +189,7 @@ var pluginDeleteCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
-		
+
 		// If no account specified, show interactive selection
 		if accountName == "" {
 			accountName = selectAccountInteractively()
@@ -197,7 +197,7 @@ var pluginDeleteCmd = &cobra.Command{
 				return // User cancelled
 			}
 		}
-		
+
 		deletePlugin(args[0], accountName)
 	},
 }
