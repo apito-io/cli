@@ -55,6 +55,15 @@ var pluginDeployCmd = &cobra.Command{
 
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		deployPlugin(pluginDir, accountName)
 	},
 }
@@ -76,6 +85,15 @@ var pluginUpdateCmd = &cobra.Command{
 
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		updatePlugin(pluginDir, accountName)
 	},
 }
@@ -87,6 +105,15 @@ var pluginListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		listPlugins(accountName)
 	},
 }
@@ -99,6 +126,15 @@ var pluginStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		getPluginStatus(args[0], accountName)
 	},
 }
@@ -111,6 +147,15 @@ var pluginRestartCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		restartPlugin(args[0], accountName)
 	},
 }
@@ -123,6 +168,15 @@ var pluginStopCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		stopPlugin(args[0], accountName)
 	},
 }
@@ -135,6 +189,15 @@ var pluginDeleteCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get account name from flag
 		accountName, _ := cmd.Flags().GetString("account")
+		
+		// If no account specified, show interactive selection
+		if accountName == "" {
+			accountName = selectAccountInteractively()
+			if accountName == "" {
+				return // User cancelled
+			}
+		}
+		
 		deletePlugin(args[0], accountName)
 	},
 }
@@ -399,13 +462,16 @@ func listPlugins(accountName string) {
 		return
 	}
 
-	print_step("📋 Listing Plugins")
-
 	account, err := getAccountConfig(accountName)
 	if err != nil {
 		print_error("Failed to get account configuration: " + err.Error())
 		return
 	}
+
+	// Display which account is being used
+	print_step(fmt.Sprintf("📋 Listing Plugins from Account: %s", accountName))
+	print_status(fmt.Sprintf("Server: %s", account.ServerURL))
+	print_status("")
 
 	serverURL := account.ServerURL
 	cloudSyncKey := account.CloudSyncKey
