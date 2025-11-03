@@ -6,3 +6,6 @@ node_modules
 cli
 __debug*
 db/*
+config.yml
+apito-cli
+apito-build

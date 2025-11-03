@@ -20,11 +20,13 @@ type AccountConfig struct {
 }
 
 type CLIConfig struct {
-	Mode           string                   `yaml:"mode"`                     // "docker" or "manual"
-	DefaultAccount string                   `yaml:"default_account"`          // Default account name
-	DefaultPlugin  string                   `yaml:"default_plugin,omitempty"` // Default plugin for operations
-	Timeout        int                      `yaml:"timeout,omitempty"`        // Request timeout in seconds
-	Accounts       map[string]AccountConfig `yaml:"accounts"`                 // Account configurations
+	Mode           string                   `yaml:"mode"`                      // "docker" or "manual"
+	DefaultAccount string                   `yaml:"default_account"`           // Default account name
+	DefaultPlugin  string                   `yaml:"default_plugin,omitempty"`  // Default plugin for operations
+	Timeout        int                      `yaml:"timeout,omitempty"`         // Request timeout in seconds
+	Accounts       map[string]AccountConfig `yaml:"accounts"`                  // Account configurations
+	EngineVersion  string                   `yaml:"engine_version,omitempty"`  // Current engine version
+	ConsoleVersion string                   `yaml:"console_version,omitempty"` // Current console version
 
 	// Legacy fields for backward compatibility
 	ServerURL    string `yaml:"server_url,omitempty"`     // Legacy: Apito server URL
@@ -158,7 +160,7 @@ func selectAndPersistRunMode() (string, error) {
 
 	if mode == "docker" {
 		if _, err := writeComposeFile(); err == nil {
-			print_status("docker-compose.yml prepared in ~/.apito")
+			print_status("added docker-compose.yml to ~/.apito")
 		}
 	}
 	return mode, nil

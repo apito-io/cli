@@ -62,6 +62,15 @@
 
 ## 🆕 **What's New in Latest Version**
 
+### 🔄 **Automatic Version Management**
+
+- **Smart Version Tracking**: Automatically fetches and stores latest engine and console versions
+- **Update Detection**: Checks for new versions every time you run `apito start`
+- **Interactive Updates**: Choose which components to update with a simple prompt
+- **Version Pinning**: Uses specific version tags instead of `:latest` for consistent deployments
+- **Zero-Downtime Updates**: Pull new images and regenerate docker-compose.yml seamlessly
+- **GitHub Integration**: Fetches versions directly from GitHub releases and container registry
+
 ### 🔌 **Plugin Management System**
 
 - **Hot Reload Plugins**: Deploy and update HashiCorp plugins without server restarts
@@ -1182,6 +1191,8 @@ The CLI manages two types of configuration:
 - `default_account` - Default account for plugin operations
 - `timeout` - Request timeout in seconds (default: 30)
 - `default_plugin` - Default plugin for operations
+- `engine_version` - Current engine Docker image version (auto-managed)
+- `console_version` - Current console Docker image version (auto-managed)
 - `accounts` - Account configurations map (supports multiple accounts)
   - `account_name` - Account configuration
     - `server_url` - Apito server URL for the account
@@ -1274,6 +1285,82 @@ The CLI manages engine configuration in `~/.apito/bin/.env`:
 - Docker Engine 20.10+
 - Docker Compose v2 (recommended) or v1
 - Docker daemon running
+
+### Version Management
+
+The CLI automatically manages engine and console versions with smart update detection:
+
+#### **How It Works:**
+
+1. **During `apito init`** (Docker mode):
+
+   - Automatically fetches latest versions from GitHub releases
+   - Stores versions in `~/.apito/config.yml`
+   - Generates `docker-compose.yml` with specific version tags
+
+2. **During `apito start`** (Docker mode):
+   - Checks for newer versions available on GitHub
+   - Prompts user if updates are found
+   - Allows selective updates (engine only, console only, or both)
+   - Automatically pulls new Docker images
+   - Regenerates `docker-compose.yml` with updated versions
+
+#### **Version Storage:**
+
+Versions are stored in `~/.apito/config.yml`:
+
+```yaml
+mode: docker
+engine_version: v1.3.1
+console_version: v2.5.0
+```
+
+#### **Update Workflow:**
+
+```bash
+# Start will check for updates
+$ apito start
+
+# If updates are available, you'll see:
+🆕 Updates Available
+
+  Engine: v1.3.0 → v1.3.1
+  Console: v2.4.0 → v2.5.0
+
+? Choose update action:
+  ▸ Update Engine (v1.3.0 → v1.3.1)
+    Update Console (v2.4.0 → v2.5.0)
+    Update Both
+    Skip Updates
+
+# After selecting, the CLI will:
+✓ Pulling Docker image: ghcr.io/apito-io/engine:v1.3.1
+✓ Successfully pulled ghcr.io/apito-io/engine:v1.3.1
+✓ Updated engine to v1.3.1
+✓ docker-compose.yml updated
+```
+
+#### **Benefits:**
+
+- **Consistent Deployments**: Version pinning prevents unexpected breaking changes
+- **Easy Rollback**: Simply edit `config.yml` to downgrade if needed
+- **Transparent Updates**: Always know what version you're running
+- **Offline-Friendly**: Uses cached images if GitHub is unreachable
+
+#### **Manual Version Control:**
+
+You can manually set versions in `config.yml`:
+
+```yaml
+engine_version: v1.2.0 # Downgrade to specific version
+console_version: latest # Use latest tag
+```
+
+Then regenerate docker-compose.yml:
+
+```bash
+apito init  # Will respect your manual version settings
+```
 
 ## 🚨 Troubleshooting
 

@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
-
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -24,21 +21,21 @@ var updateCmd = &cobra.Command{
 	ValidArgs: []string{"engine", "console", "self"},
 	Args:      cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
 	Run: func(cmd *cobra.Command, args []string) {
-		version, _ := cmd.Flags().GetString("version")
+		targetVersion, _ := cmd.Flags().GetString("version")
 		actionName := args[0]
 
 		switch actionName {
 		case "engine":
-			if err := updateEngine(version); err != nil {
-				fmt.Println("Update engine failed:", err)
+			if err := updateEngineCommand(targetVersion); err != nil {
+				print_error("Update engine failed: " + err.Error())
 			}
 		case "console":
-			if err := updateConsole(version); err != nil {
-				fmt.Println("Update console failed:", err)
+			if err := updateConsoleCommand(targetVersion); err != nil {
+				print_error("Update console failed: " + err.Error())
 			}
-		case "self":
-			if err := updateSelf(version); err != nil {
-				fmt.Println("Self update failed:", err)
+		case "self", "cli":
+			if err := runSelfUpgrade(); err != nil {
+				print_error("Self update failed: " + err.Error())
 			}
 		}
 	},
@@ -75,87 +72,208 @@ func confirmPrompt(msg string) bool {
 	return v == "Yes"
 }
 
-func updateSelf(ver string) error {
-	// Determine latest if not provided
-	if ver == "" {
-		tag, err := latestTag("apito-io/cli")
+// updateEngineCommand updates engine based on current mode (docker or manual)
+func updateEngineCommand(targetVersion string) error {
+	// Determine current run mode
+	mode, err := determineRunMode()
+	if err != nil {
+		return fmt.Errorf("failed to determine run mode: %w", err)
+	}
+
+	print_step("🔄 Updating Engine")
+	print_status(fmt.Sprintf("Mode: %s", mode))
+	fmt.Println()
+
+	if mode == "docker" {
+		return updateEngineDocker(targetVersion)
+	}
+	return updateEngineManual(targetVersion)
+}
+
+// updateConsoleCommand updates console based on current mode (docker or manual)
+func updateConsoleCommand(targetVersion string) error {
+	// Determine current run mode
+	mode, err := determineRunMode()
+	if err != nil {
+		return fmt.Errorf("failed to determine run mode: %w", err)
+	}
+
+	print_step("🔄 Updating Console")
+	print_status(fmt.Sprintf("Mode: %s", mode))
+	fmt.Println()
+
+	if mode == "docker" {
+		return updateConsoleDocker(targetVersion)
+	}
+	return updateConsoleManual(targetVersion)
+}
+
+// updateEngineDocker updates engine Docker image and config
+func updateEngineDocker(targetVersion string) error {
+	// If no version specified, get latest
+	if targetVersion == "" {
+		print_status("Fetching latest engine version...")
+		latestVersion, err := getLatestEngineVersion()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to fetch latest version: %w", err)
 		}
-		ver = tag
+		targetVersion = latestVersion
+		print_success(fmt.Sprintf("Latest version: %s", targetVersion))
 	}
-	// Compare with current version
-	if version == ver {
-		fmt.Println("CLI already up-to-date:", ver)
-		return nil
+
+	// Get current version from config
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
-	if !confirmPrompt(fmt.Sprintf("Update CLI from %s to %s?", version, ver)) {
+
+	currentVersion := cfg.EngineVersion
+	if currentVersion == "" {
+		currentVersion = "unknown"
+	}
+
+	// Check if already on target version
+	if currentVersion == targetVersion {
+		print_success(fmt.Sprintf("Engine already at version %s", targetVersion))
 		return nil
 	}
 
-	// Download platform artifact
-	osName := runtime.GOOS
-	arch := runtime.GOARCH
-	asset := fmt.Sprintf("apito_%s_%s_%s.tar.gz", ver, osName, arch)
-	url := fmt.Sprintf("https://github.com/apito-io/cli/releases/download/%s/%s", ver, asset)
-	tmp, err := downloadFileWithProgress(url, os.TempDir())
-	if err != nil {
-		return err
+	// Confirm update
+	print_status(fmt.Sprintf("Current version: %s", currentVersion))
+	print_status(fmt.Sprintf("Target version: %s", targetVersion))
+	fmt.Println()
+
+	if !confirmPrompt(fmt.Sprintf("Update engine from %s to %s?", currentVersion, targetVersion)) {
+		print_status("Update cancelled")
+		return nil
 	}
-	dir, err := extractArchiveToTemp(tmp)
-	if err != nil {
-		return err
+
+	// Pull Docker image
+	if err := pullDockerImage("engine", targetVersion); err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
 	}
-	// Move apito binary to install location in PATH
-	// Heuristic: prefer /usr/local/bin, else ~/.local/bin
-	dest := "/usr/local/bin"
-	if _, err := os.Stat(dest); os.IsNotExist(err) {
-		dest = filepath.Join(os.Getenv("HOME"), ".local", "bin")
+
+	// Update config.yml
+	if err := updateComponentVersion("engine", targetVersion); err != nil {
+		return fmt.Errorf("failed to update config: %w", err)
 	}
-	if err := os.MkdirAll(dest, 0755); err != nil {
-		return err
+
+	// Regenerate docker-compose.yml
+	print_status("Updating docker-compose.yml...")
+	if _, err := writeComposeFile(); err != nil {
+		return fmt.Errorf("failed to update docker-compose.yml: %w", err)
 	}
-	src, err := findBinaryInDir(dir, "apito")
-	if err != nil {
-		return err
-	}
-	final := filepath.Join(dest, "apito")
-	if err := os.Rename(src, final); err != nil {
-		return err
-	}
-	if runtime.GOOS != "windows" {
-		_ = os.Chmod(final, 0755)
-	}
-	fmt.Println("CLI updated:", ver, "->", final)
+	print_success("docker-compose.yml updated")
+
+	fmt.Println()
+	print_success(fmt.Sprintf("✅ Engine updated to %s", targetVersion))
+	print_status("Run 'apito restart' to apply changes")
+
 	return nil
 }
 
-func updateEngine(ver string) error {
-	if ver == "" {
+// updateConsoleDocker updates console Docker image and config
+func updateConsoleDocker(targetVersion string) error {
+	// If no version specified, get latest
+	if targetVersion == "" {
+		print_status("Fetching latest console version...")
+		latestVersion, err := getLatestConsoleVersion()
+		if err != nil {
+			return fmt.Errorf("failed to fetch latest version: %w", err)
+		}
+		targetVersion = latestVersion
+		print_success(fmt.Sprintf("Latest version: %s", targetVersion))
+	}
+
+	// Get current version from config
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	currentVersion := cfg.ConsoleVersion
+	if currentVersion == "" {
+		currentVersion = "unknown"
+	}
+
+	// Check if already on target version
+	if currentVersion == targetVersion {
+		print_success(fmt.Sprintf("Console already at version %s", targetVersion))
+		return nil
+	}
+
+	// Confirm update
+	print_status(fmt.Sprintf("Current version: %s", currentVersion))
+	print_status(fmt.Sprintf("Target version: %s", targetVersion))
+	fmt.Println()
+
+	if !confirmPrompt(fmt.Sprintf("Update console from %s to %s?", currentVersion, targetVersion)) {
+		print_status("Update cancelled")
+		return nil
+	}
+
+	// Pull Docker image
+	if err := pullDockerImage("console", targetVersion); err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+
+	// Update config.yml
+	if err := updateComponentVersion("console", targetVersion); err != nil {
+		return fmt.Errorf("failed to update config: %w", err)
+	}
+
+	// Regenerate docker-compose.yml
+	print_status("Updating docker-compose.yml...")
+	if _, err := writeComposeFile(); err != nil {
+		return fmt.Errorf("failed to update docker-compose.yml: %w", err)
+	}
+	print_success("docker-compose.yml updated")
+
+	fmt.Println()
+	print_success(fmt.Sprintf("✅ Console updated to %s", targetVersion))
+	print_status("Run 'apito restart' to apply changes")
+
+	return nil
+}
+
+// updateEngineManual updates engine binary for manual mode
+func updateEngineManual(targetVersion string) error {
+	if targetVersion == "" {
 		tag, err := latestTag("apito-io/engine")
 		if err != nil {
 			return err
 		}
-		ver = tag
+		targetVersion = tag
 	}
-	if !confirmPrompt("Update engine to " + ver + "?") {
+	if !confirmPrompt("Update engine to " + targetVersion + "?") {
+		print_status("Update cancelled")
 		return nil
 	}
 	home, _ := os.UserHomeDir()
-	return downloadEngine(ver, home)
+	if err := downloadEngine(targetVersion, home); err != nil {
+		return err
+	}
+	print_success(fmt.Sprintf("✅ Engine updated to %s", targetVersion))
+	return nil
 }
 
-func updateConsole(ver string) error {
-	if ver == "" {
+// updateConsoleManual updates console binary for manual mode
+func updateConsoleManual(targetVersion string) error {
+	if targetVersion == "" {
 		tag, err := latestTag("apito-io/console")
 		if err != nil {
 			return err
 		}
-		ver = tag
+		targetVersion = tag
 	}
-	if !confirmPrompt("Update console to " + ver + "?") {
+	if !confirmPrompt("Update console to " + targetVersion + "?") {
+		print_status("Update cancelled")
 		return nil
 	}
 	home, _ := os.UserHomeDir()
-	return downloadConsole(ver, home)
+	if err := downloadConsole(targetVersion, home); err != nil {
+		return err
+	}
+	print_success(fmt.Sprintf("✅ Console updated to %s", targetVersion))
+	return nil
 }

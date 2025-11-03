@@ -1,0 +1,12 @@
+mode: docker
+default_account: production
+timeout: 30
+engine_version: v1.3.1
+console_version: v0.1.0
+accounts:
+    development:
+        server_url: http://localhost:5050
+        cloud_sync_key: cl-AQAAAABo3Wov1s_uv6RndWxE_G....... (your cloud sync key)
+    production:
+        server_url: https://api.example.com
+        cloud_sync_key: cl-AQAAAABo3Wov1s_uv6RndWxE_G....... (your cloud sync key)

@@ -170,8 +170,50 @@ func startApito() {
 	case "docker":
 		print_status("Docker mode: skipping local port pre-check (Docker will map ports)")
 
-		// Docker mode
-		print_status("Starting services via Docker...")
+		// Check for component updates before starting
+		print_status("Checking for component updates...")
+		updates, err := checkForComponentUpdates()
+		if err != nil {
+			print_warning("Could not check for updates: " + err.Error())
+		} else if len(updates) > 0 {
+			// Prompt user for updates
+			componentsToUpdate := promptForComponentUpdates(updates)
+			if len(componentsToUpdate) > 0 {
+				for _, component := range componentsToUpdate {
+					update := updates[component]
+
+					// Pull the new image
+					if err := pullDockerImage(component, update.LatestVersion); err != nil {
+						print_error(fmt.Sprintf("Failed to pull %s: %v", component, err))
+						continue
+					}
+
+					// Update config.yml
+					if err := updateComponentVersion(component, update.LatestVersion); err != nil {
+						print_error(fmt.Sprintf("Failed to update config for %s: %v", component, err))
+						continue
+					}
+
+					print_success(fmt.Sprintf("Updated %s to %s", component, update.LatestVersion))
+				}
+
+				// Regenerate docker-compose.yml with new versions
+				print_status("Updating docker-compose.yml...")
+				if _, err := writeComposeFile(); err != nil {
+					print_error("Failed to update docker-compose.yml: " + err.Error())
+				} else {
+					print_success("docker-compose.yml updated")
+				}
+			} else {
+				print_status("Skipping updates, using current versions")
+			}
+		} else {
+			print_success("All components are up to date")
+		}
+		fmt.Println()
+
+		// Docker mode - start services
+		print_step("🐳 Starting Docker Services")
 		if err := ensureDockerAndComposeAvailable(); err != nil {
 			print_error("Docker not available: " + err.Error())
 			return
@@ -180,6 +222,7 @@ func startApito() {
 			print_error("Failed to start Docker services: " + err.Error())
 			return
 		}
+		fmt.Println()
 		print_success("Docker services started (engine:5050, console:4000)")
 
 	default:
@@ -810,9 +853,35 @@ func waitForInterrupt() {
 }
 
 func stopAllServices() {
-	// Use managed services for shutdown
-	_ = stopManagedService("console")
-	_ = stopManagedService("engine")
+	// Determine the run mode and stop services accordingly
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		print_error("Failed to load configuration: " + err.Error())
+		return
+	}
 
-	print_success("All services stopped")
+	mode := cfg.Mode
+	if mode == "" {
+		mode = "manual"
+	}
+
+	switch mode {
+	case "docker":
+		// Stop Docker containers
+		print_status("Stopping Docker containers...")
+		if err := dockerComposeDown(); err != nil {
+			print_error("Failed to stop Docker services: " + err.Error())
+			return
+		}
+		print_success("All Docker services stopped")
+
+	case "manual":
+		// Stop managed processes
+		_ = stopManagedService("console")
+		_ = stopManagedService("engine")
+		print_success("All services stopped")
+
+	default:
+		print_error("Unknown run mode: " + mode)
+	}
 }

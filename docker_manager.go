@@ -472,7 +472,7 @@ func removeDatabaseFromCompose(dbType string) error {
 	return os.WriteFile(path, yamlData, 0644)
 }
 
-// dockerComposeUp runs docker compose up
+// dockerComposeUp runs docker compose up with detailed image pulling feedback
 func dockerComposeUp() error {
 	if err := ensureDockerAndComposeAvailable(); err != nil {
 		return err
@@ -493,14 +493,57 @@ func dockerComposeUp() error {
 		}
 	}
 
+	// Load config to show what versions are being used
+	cfg, err := loadCLIConfig()
+	if err == nil {
+		engineVer := cfg.EngineVersion
+		if engineVer == "" {
+			engineVer = "latest"
+		}
+		consoleVer := cfg.ConsoleVersion
+		if consoleVer == "" {
+			consoleVer = "latest"
+		}
+
+		print_status(fmt.Sprintf("Engine version: %s", engineVer))
+		print_status(fmt.Sprintf("Console version: %s", consoleVer))
+		fmt.Println()
+	}
+
+	// Pull images explicitly to show progress
+	print_status("Pulling Docker images...")
+	pullCmd := exec.Command("docker", "compose", "-f", path, "pull")
+	pullCmd.Stdout = os.Stdout
+	pullCmd.Stderr = os.Stderr
+
+	if err := pullCmd.Run(); err != nil {
+		// Try v1 syntax if v2 fails
+		pullCmd = exec.Command("docker-compose", "-f", path, "pull")
+		pullCmd.Stdout = os.Stdout
+		pullCmd.Stderr = os.Stderr
+		if err := pullCmd.Run(); err != nil {
+			print_warning("Could not pull images: " + err.Error())
+			print_status("Attempting to start with cached images...")
+		}
+	}
+	fmt.Println()
+
+	// Start services
+	print_status("Starting containers...")
+
 	// Try Docker Compose v2 first
 	cmd := exec.Command("docker", "compose", "-f", path, "up", "-d")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
 	if err := cmd.Run(); err == nil {
 		return nil
 	}
 
 	// Fall back to Docker Compose v1
 	cmd = exec.Command("docker-compose", "-f", path, "up", "-d")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
@@ -586,11 +629,27 @@ func writeComposeFile() (string, error) {
 	_ = os.Chmod(engineDataDir, 0777)
 
 	// Mount .env from ~/.apito/bin/.env into container workdir .env
+	// Note: .env file will be created by ensureDefaultEnvironmentConfig() in init.go
 	envDir := filepath.Join(apitoDir, "bin")
 	_ = os.MkdirAll(envDir, 0755)
 	envFile := filepath.Join(envDir, ".env")
-	if _, err := os.Stat(envFile); os.IsNotExist(err) {
-		_ = os.WriteFile(envFile, []byte(""), 0644)
+	// Don't create empty .env file here - let init.go handle it with proper defaults
+
+	// Load CLI config to get version information
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return "", fmt.Errorf("failed to load CLI config: %w", err)
+	}
+
+	// Use version from config or default to latest
+	engineVersion := "latest"
+	if cfg.EngineVersion != "" {
+		engineVersion = cfg.EngineVersion
+	}
+
+	consoleVersion := "latest"
+	if cfg.ConsoleVersion != "" {
+		consoleVersion = cfg.ConsoleVersion
 	}
 
 	// Create compose structure
@@ -601,20 +660,20 @@ func writeComposeFile() (string, error) {
 
 	// Add engine service
 	compose.Services["engine"] = Service{
-		Image:         "ghcr.io/apito-io/engine:latest",
+		Image:         fmt.Sprintf("ghcr.io/apito-io/engine:%s", engineVersion),
 		ContainerName: "apito-engine",
 		Environment:   []string{},
 		Ports:         []string{"5050:5050"},
 		Volumes: []string{
-			fmt.Sprintf("%s:/go/src/gitlab.com/apito.io/engine/db", engineDataDir),
-			fmt.Sprintf("%s:/go/src/gitlab.com/apito.io/engine/.env", envFile),
+			fmt.Sprintf("%s:/app/.env", envFile),
+			fmt.Sprintf("%s:/app/db", engineDataDir),
 		},
 		Restart: "unless-stopped",
 	}
 
 	// Add console service
 	compose.Services["console"] = Service{
-		Image:         "ghcr.io/apito-io/console:latest",
+		Image:         fmt.Sprintf("ghcr.io/apito-io/console:%s", consoleVersion),
 		ContainerName: "apito-console",
 		Environment:   []string{},
 		Ports:         []string{"4000:8080"},

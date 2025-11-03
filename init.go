@@ -43,6 +43,26 @@ func initializeSystem() {
 	print_success("Run mode: " + mode)
 	fmt.Println()
 
+	// Step 0.5: Fetch and store latest component versions (Docker mode only)
+	if mode == "docker" {
+		print_status("Step 0.5: Checking for latest component versions...")
+		if err := ensureComponentVersions(); err != nil {
+			print_warning("Could not fetch latest versions: " + err.Error())
+			print_status("Will use 'latest' tags for Docker images")
+		} else {
+			print_success("Component versions configured")
+		}
+
+		// Regenerate docker-compose.yml with updated versions
+		print_status("Updating docker-compose.yml with component versions...")
+		if _, err := writeComposeFile(); err != nil {
+			print_warning("Could not update docker-compose.yml: " + err.Error())
+		} else {
+			print_success("docker-compose.yml updated with component versions")
+		}
+		fmt.Println()
+	}
+
 	// Step 1: Check and create ~/.apito directory
 	print_status("Step 1: Checking Apito directory...")
 	if err := ensureApitoDirectory(); err != nil {
@@ -54,7 +74,7 @@ func initializeSystem() {
 
 	// Step 2: Check and create .config file
 	print_status("Step 2: Checking system configuration...")
-	if err := ensureSystemConfig(); err != nil {
+	if err := ensureDefaultEnvironmentConfig(); err != nil {
 		print_error("Failed to create system configuration: " + err.Error())
 		return
 	}
@@ -121,7 +141,7 @@ func ensureApitoDirectory() error {
 	return nil
 }
 
-func ensureSystemConfig() error {
+func ensureDefaultEnvironmentConfig() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("error finding home directory: %w", err)
@@ -139,31 +159,31 @@ func ensureSystemConfig() error {
 
 		// Create default configuration
 		defaultConfig := map[string]string{
-			"ENVIRONMENT": "local",
+			"ENVIRONMENT":           "local",
 			"AUTH_SERVICE_PROVIDER": "local",
-			"BRANKA_KEY": "",
-			"COOKIE_DOMAIN": "localhost",
-			"CORS_ORIGIN": "http://localhost:4000",
-			"PLUGIN_PATH": "plugins",
-			"PRIVATE_KEY_PATH": "keys/private.key",
-			"PUBLIC_KEY_PATH": "keys/public.key",
-			"SERVE_PORT": "5050",
-			"TOKEN_TTL": "60",
+			"BRANKA_KEY":            "",
+			"COOKIE_DOMAIN":         "localhost",
+			"CORS_ORIGIN":           "http://localhost:4000",
+			"PLUGIN_PATH":           "plugins",
+			"PRIVATE_KEY_PATH":      "keys/private.key",
+			"PUBLIC_KEY_PATH":       "keys/public.key",
+			"SERVE_PORT":            "5050",
+			"TOKEN_TTL":             "60",
 
 			"CACHE_DRIVER": "memory",
-			"CACHE_TTL": "600",
+			"CACHE_TTL":    "600",
 
-			"KV_ENGINE": "coreDB",
+			"KV_ENGINE":   "coreDB",
 			"KV_DATABASE": "~/.apito/engine-data/apito_kv.db",
 
-			"QUEUE_ENGINE": "coreDB",
+			"QUEUE_ENGINE":   "coreDB",
 			"QUEUE_DATABASE": "~/.apito/engine-data/apito_queue.db",
 
 			"SYSTEM_DB_ENGINE": "coreDB",
-			"SYSTEM_DB_NAME": "~/.apito/engine-data/apito_system.db",
+			"SYSTEM_DB_NAME":   "~/.apito/engine-data/apito_system.db",
 
 			"PROJECT_DB_ENGINE": "coreDB",
-			"PROJECT_DB_NAME": "~/.apito/engine-data/apito_project.db",
+			"PROJECT_DB_NAME":   "~/.apito/engine-data/apito_project.db",
 
 			"DEFAULT_SAAS_PROJECT_DB_NAME": "~/.apito/engine-data/apito_saas_project.db",
 		}
@@ -331,7 +351,7 @@ func promptForDatabaseConfig(config map[string]string, prefix string) error {
 		return fmt.Errorf("error finding home directory: %w", err)
 	}
 
-	if err := saveEnvConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+	if err := saveEnvConfig(filepath.Join(homeDir, ".apito", "bin"), config); err != nil {
 		return fmt.Errorf("error saving configuration: %w", err)
 	}
 
@@ -389,7 +409,7 @@ func promptForEnvironmentConfig(config map[string]string) error {
 		return fmt.Errorf("error finding home directory: %w", err)
 	}
 
-	if err := saveEnvConfig(filepath.Join(homeDir, ".apito"), config); err != nil {
+	if err := saveEnvConfig(filepath.Join(homeDir, ".apito", "bin"), config); err != nil {
 		return fmt.Errorf("error saving configuration: %w", err)
 	}
 
@@ -412,6 +432,72 @@ func generateBrankaKey() string {
 		}
 	}
 	return string(result)
+}
+
+// ensureComponentVersions checks for latest versions and prompts for updates
+func ensureComponentVersions() error {
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Check for updates (compares current vs latest)
+	updates, err := checkForComponentUpdates()
+	if err != nil {
+		return fmt.Errorf("failed to check for updates: %w", err)
+	}
+
+	// If no current versions set, automatically use latest without prompting
+	if cfg.EngineVersion == "" && cfg.ConsoleVersion == "" {
+		print_status("No versions configured, fetching latest versions...")
+
+		// Fetch and set engine version
+		if engineVersion, err := getLatestEngineVersion(); err == nil {
+			cfg.EngineVersion = engineVersion
+			print_success(fmt.Sprintf("Engine version set to %s", engineVersion))
+		} else {
+			print_warning(fmt.Sprintf("Could not fetch engine version: %v", err))
+		}
+
+		// Fetch and set console version
+		if consoleVersion, err := getLatestConsoleVersion(); err == nil {
+			cfg.ConsoleVersion = consoleVersion
+			print_success(fmt.Sprintf("Console version set to %s", consoleVersion))
+		} else {
+			print_warning(fmt.Sprintf("Could not fetch console version: %v", err))
+		}
+
+		// Save config
+		if err := saveCLIConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		return nil
+	}
+
+	// If versions exist and updates are available, prompt user
+	if len(updates) > 0 {
+		componentsToUpdate := promptForComponentUpdates(updates)
+		if len(componentsToUpdate) > 0 {
+			for _, component := range componentsToUpdate {
+				update := updates[component]
+
+				// Update config.yml
+				if err := updateComponentVersion(component, update.LatestVersion); err != nil {
+					print_error(fmt.Sprintf("Failed to update config for %s: %v", component, err))
+					continue
+				}
+
+				print_success(fmt.Sprintf("Updated %s to %s", component, update.LatestVersion))
+			}
+		} else {
+			print_status("Keeping current versions")
+		}
+	} else {
+		print_success("All components are up to date")
+	}
+
+	return nil
 }
 
 func checkPortAvailability() error {
