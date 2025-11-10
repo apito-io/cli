@@ -162,6 +162,8 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 	}
 	configFile := filepath.Join(apitoBinDir, ".env")
 
+	defaultDatabaseDir := "/app/db"
+
 	var (
 		cacheDatabasePath        string
 		kvDatabasePath           string
@@ -175,12 +177,12 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 		// docker usages /app as working directory
 		// in docker ~/.apito/db is mouunted as /app/db
 		// so we use /app/db as the database path
-		cacheDatabasePath = "/app/db/apito_cache.db"
-		kvDatabasePath = "/app/db/apito_kv.db"
-		queueDatabasePath = "/app/db/apito_queue.db"
-		systemDatabasePath = "/app/db/apito_system.db"
-		projectDatabasePath = "/app/db/apito_project.db"
-		defaultSaaSProjectDBPath = "/app/db/apito_saas_project.db"
+		cacheDatabasePath = "apito_cache.db"
+		kvDatabasePath = "apito_kv.db"
+		queueDatabasePath = "apito_queue.db"
+		systemDatabasePath = "apito_system.db"
+		projectDatabasePath = "apito_project.db"
+		defaultSaaSProjectDBPath = "apito_saas_project.db"
 	} else {
 		// in normal mode, we use the home directory
 		dbDataDir := filepath.Join(homeDir, ".apito", "db")
@@ -209,7 +211,7 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 			"SERVE_PORT":            "5050",
 			"TOKEN_TTL":             "60",
 
-			"DEFAULT_DATABASE_DIR": "/app/db",
+			"DEFAULT_DATABASE_DIR": defaultDatabaseDir,
 
 			"CACHE_DB":      "memory",
 			"CACHE_DB_HOST": cacheDatabasePath,
