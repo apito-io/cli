@@ -622,7 +622,7 @@ func writeComposeFile() (string, error) {
 		return "", err
 	}
 
-	engineDataDir := filepath.Join(apitoDir, "engine-data")
+	engineDataDir := filepath.Join(apitoDir, "db")
 	if err := os.MkdirAll(engineDataDir, 0777); err != nil {
 		return "", err
 	}

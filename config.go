@@ -131,7 +131,7 @@ func selectAndPersistRunMode() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	items := []string{"Docker (recommended, stable)", "Manual (experimental, local setup)"}
+	items := []string{"Docker (recommended, stable)", "Manual (experimental, local binary setup)"}
 	selector := promptui.Select{
 		Label: "Select run mode",
 		Items: items,

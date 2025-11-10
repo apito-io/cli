@@ -85,14 +85,14 @@ func startApito() {
 		// Validate critical assets in both modes
 		binDir := filepath.Join(apitoDir, "bin")
 		envFile := filepath.Join(binDir, ".env")
-		engineDataDir := filepath.Join(apitoDir, "engine-data")
+		dbDir := filepath.Join(apitoDir, "db")
 		if _, err := os.Stat(envFile); os.IsNotExist(err) {
 			print_error("Missing ~/.apito/bin/.env. Please run: apito init")
 			return
 		}
-		if _, err := os.Stat(engineDataDir); os.IsNotExist(err) {
-			if err := os.MkdirAll(engineDataDir, 0755); err != nil {
-				print_error("Failed to create engine-data directory: " + err.Error())
+		if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+			if err := os.MkdirAll(dbDir, 0755); err != nil {
+				print_error("Failed to create db directory: " + err.Error())
 				return
 			}
 		}

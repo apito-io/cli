@@ -165,11 +165,11 @@ func ensureBaseDirs() error {
 	}
 	apitoDir := filepath.Join(homeDir, ".apito")
 	binDir := filepath.Join(apitoDir, "bin")
-	engineDataDir := filepath.Join(apitoDir, "engine-data")
+	dbDir := filepath.Join(apitoDir, "db")
 	logsDir := filepath.Join(apitoDir, "logs")
 	runDir := filepath.Join(apitoDir, "run")
 
-	for _, d := range []string{apitoDir, binDir, engineDataDir, logsDir, runDir} {
+	for _, d := range []string{apitoDir, binDir, dbDir, logsDir, runDir} {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return fmt.Errorf("error creating directory %s: %w", d, err)
 		}

@@ -153,7 +153,7 @@ apito init
 
 This command will:
 
-- Create core directories under `~/.apito` (e.g., `bin/`, `engine-data/`, `logs/`, `run/`)
+- Create core directories under `~/.apito` (e.g., `bin/`, `db/`, `logs/`, `run/`)
 - Create `~/.apito/bin/.env` with default system configuration
 - Ask you to choose a run mode: Docker (recommended, default) or Manual, and save it to `~/.apito/config.yml`
 - **Database setup is now handled separately** - use `apito start --db system` or `apito start --db project`
@@ -184,7 +184,7 @@ This command will (based on run mode stored in `~/.apito/config.yml`):
 
 - **Docker mode (default, recommended)**:
   - Ensure `~/.apito/docker-compose.yml` exists (engine + console)
-  - Mount `~/.apito/engine-data -> /go/src/gitlab.com/apito.io/engine/db` and `~/.apito/bin/.env -> /go/src/gitlab.com/apito.io/engine/.env`
+  - Mount `~/.apito/db -> /app/db` and `~/.apito/bin/.env -> /app/.env`
   - Start services via `docker compose -f ~/.apito/docker-compose.yml up -d`
   - **Optional**: `--db system` or `--db project` to start specific database types
 - **Manual mode**:
@@ -1158,7 +1158,7 @@ Apito CLI sets up the following structure:
 │   ├── engine               # Engine binary (Manual mode)
 │   ├── caddy                # Caddy binary (Manual mode)
 │   └── .env                 # System configuration mounted into engine container
-├── engine-data/             # Persistent engine data volume (Docker mode)
+├── db/                      # Persistent engine data volume (Docker mode)
 ├── docker-compose.yml       # Engine + Console compose (Docker mode)
 ├── db-compose.yml           # Database compose (generated when --db flag used)
 ├── console/                 # Console static files (Manual mode)

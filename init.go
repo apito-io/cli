@@ -74,7 +74,7 @@ func initializeSystem() {
 
 	// Step 2: Check and create .config file
 	print_status("Step 2: Checking system configuration...")
-	if err := ensureDefaultEnvironmentConfig(); err != nil {
+	if err := ensureDefaultEnvironmentConfig(mode); err != nil {
 		print_error("Failed to create system configuration: " + err.Error())
 		return
 	}
@@ -141,10 +141,19 @@ func ensureApitoDirectory() error {
 	return nil
 }
 
-func ensureDefaultEnvironmentConfig() error {
+func ensureDefaultEnvironmentConfig(runMode string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("error finding home directory: %w", err)
+	}
+
+	if runMode == "" {
+		if cfg, cfgErr := loadCLIConfig(); cfgErr == nil && cfg.Mode != "" {
+			runMode = cfg.Mode
+		}
+	}
+	if runMode == "" {
+		runMode = "docker"
 	}
 
 	apitoBinDir := filepath.Join(homeDir, ".apito", "bin")
@@ -152,6 +161,36 @@ func ensureDefaultEnvironmentConfig() error {
 		return fmt.Errorf("error creating bin directory: %w", err)
 	}
 	configFile := filepath.Join(apitoBinDir, ".env")
+
+	var (
+		cacheDatabasePath        string
+		kvDatabasePath           string
+		queueDatabasePath        string
+		systemDatabasePath       string
+		projectDatabasePath      string
+		defaultSaaSProjectDBPath string
+	)
+
+	if runMode == "docker" {
+		// docker usages /app as working directory
+		// in docker ~/.apito/db is mouunted as /app/db
+		// so we use /app/db as the database path
+		cacheDatabasePath = "/app/db/apito_cache.db"
+		kvDatabasePath = "/app/db/apito_kv.db"
+		queueDatabasePath = "/app/db/apito_queue.db"
+		systemDatabasePath = "/app/db/apito_system.db"
+		projectDatabasePath = "/app/db/apito_project.db"
+		defaultSaaSProjectDBPath = "/app/db/apito_saas_project.db"
+	} else {
+		// in normal mode, we use the home directory
+		dbDataDir := filepath.Join(homeDir, ".apito", "db")
+		cacheDatabasePath = filepath.Join(dbDataDir, "apito_cache.db")
+		kvDatabasePath = filepath.Join(dbDataDir, "apito_kv.db")
+		queueDatabasePath = filepath.Join(dbDataDir, "apito_queue.db")
+		systemDatabasePath = filepath.Join(dbDataDir, "apito_system.db")
+		projectDatabasePath = filepath.Join(dbDataDir, "apito_project.db")
+		defaultSaaSProjectDBPath = filepath.Join(dbDataDir, "apito_saas_project.db")
+	}
 
 	// Check if config file exists
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -170,22 +209,25 @@ func ensureDefaultEnvironmentConfig() error {
 			"SERVE_PORT":            "5050",
 			"TOKEN_TTL":             "60",
 
-			"CACHE_DRIVER": "memory",
-			"CACHE_TTL":    "600",
+			"DEFAULT_DATABASE_DIR": "/app/db",
+
+			"CACHE_DB":      "memory",
+			"CACHE_DB_HOST": cacheDatabasePath,
+			"CACHE_TTL":     "600",
 
 			"KV_ENGINE":   "coreDB",
-			"KV_DATABASE": "~/.apito/engine-data/apito_kv.db",
+			"KV_DATABASE": kvDatabasePath,
 
 			"QUEUE_ENGINE":   "coreDB",
-			"QUEUE_DATABASE": "~/.apito/engine-data/apito_queue.db",
+			"QUEUE_DATABASE": queueDatabasePath,
 
 			"SYSTEM_DB_ENGINE": "coreDB",
-			"SYSTEM_DB_NAME":   "~/.apito/engine-data/apito_system.db",
+			"SYSTEM_DB_NAME":   systemDatabasePath,
 
 			"PROJECT_DB_ENGINE": "coreDB",
-			"PROJECT_DB_NAME":   "~/.apito/engine-data/apito_project.db",
+			"PROJECT_DB_NAME":   projectDatabasePath,
 
-			"DEFAULT_SAAS_PROJECT_DB_NAME": "~/.apito/engine-data/apito_saas_project.db",
+			"DEFAULT_SAAS_PROJECT_DB_NAME": defaultSaaSProjectDBPath,
 		}
 
 		if err := saveEnvConfig(apitoBinDir, defaultConfig); err != nil {
