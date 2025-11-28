@@ -64,7 +64,9 @@ var pluginDeployCmd = &cobra.Command{
 			}
 		}
 
-		deployPlugin(pluginDir, accountName)
+		forceReplace, _ := cmd.Flags().GetBool("replace")
+
+		deployPlugin(pluginDir, accountName, forceReplace)
 	},
 }
 
@@ -227,6 +229,10 @@ type PluginConfig struct {
 			Key   string `yaml:"key"`
 			Value string `yaml:"value"`
 		} `yaml:"env_vars"`
+		UIConfig *struct {
+			Enable   bool   `yaml:"enable"`
+			DistPath string `yaml:"dist_path"`
+		} `yaml:"ui_config,omitempty"`
 	} `yaml:"plugin"`
 }
 
@@ -265,6 +271,7 @@ func init() {
 
 	// Add --account flags to all plugin commands
 	pluginDeployCmd.Flags().StringP("account", "a", "", "Account to use for deployment")
+	pluginDeployCmd.Flags().Bool("replace", false, "Delete existing plugin before deployment")
 	pluginUpdateCmd.Flags().StringP("account", "a", "", "Account to use for update")
 	pluginListCmd.Flags().StringP("account", "a", "", "Account to use for listing")
 	pluginStatusCmd.Flags().StringP("account", "a", "", "Account to use for status check")
@@ -349,7 +356,7 @@ func createPluginScaffold() {
 	print_status("4. Deploy: apito plugin deploy")
 }
 
-func deployPlugin(pluginDir, accountName string) {
+func deployPlugin(pluginDir, accountName string, forceReplace bool) {
 	if !checkServerConfig(accountName) {
 		return
 	}
@@ -364,11 +371,25 @@ func deployPlugin(pluginDir, accountName string) {
 	pluginID := config.Plugin.ID
 
 	// Ask for confirmation before deployment
-	if !confirmSensitiveOperation("deploy", pluginID, accountName,
+	extraInfo := []string{
 		fmt.Sprintf("Version: %s", config.Plugin.Version),
 		fmt.Sprintf("Language: %s", config.Plugin.Language),
-		fmt.Sprintf("Type: %s", config.Plugin.Type)) {
+		fmt.Sprintf("Type: %s", config.Plugin.Type),
+	}
+
+	if forceReplace {
+		extraInfo = append(extraInfo, "Replace Mode: enabled (existing deployment will be deleted first)")
+	}
+
+	if !confirmSensitiveOperation("deploy", pluginID, accountName, extraInfo...) {
 		return
+	}
+
+	if forceReplace {
+		if err := deleteExistingPluginBeforeDeploy(pluginID, accountName); err != nil {
+			print_error("Failed to delete existing plugin: " + err.Error())
+			return
+		}
 	}
 
 	print_step("🚀 Deploying Plugin")
@@ -640,34 +661,26 @@ func deletePlugin(pluginID, accountName string) {
 
 	print_step(fmt.Sprintf("🗑️  Deleting Plugin: %s", pluginID))
 
-	account, err := getAccountConfig(accountName)
+	statusCode, body, err := performPluginDeleteRequest(pluginID, accountName)
 	if err != nil {
-		print_error("Failed to get account configuration: " + err.Error())
+		print_error("Failed to delete plugin: " + err.Error())
 		return
 	}
 
-	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
-
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
-	if err != nil {
-		print_error("Failed to create request: " + err.Error())
+	if statusCode == http.StatusNotFound {
+		print_warning("Plugin not found on server")
 		return
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		print_error("Failed to connect to server: " + err.Error())
+	if len(body) == 0 {
+		print_error("Server returned empty response during deletion")
 		return
 	}
-	defer resp.Body.Close()
 
 	var response PluginOperationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		print_error("Failed to decode response: " + err.Error())
+	if err := json.Unmarshal(body, &response); err != nil {
+		print_error(fmt.Sprintf("Failed to decode response: %v", err))
+		print_error(fmt.Sprintf("Server response: %s", strings.TrimSpace(string(body))))
 		return
 	}
 
@@ -805,6 +818,111 @@ func controlPlugin(pluginID, action, accountName string) {
 	}
 }
 
+func deleteExistingPluginBeforeDeploy(pluginID, accountName string) error {
+	print_status("🔁 Replace flag detected: deleting existing deployment before uploading new version...")
+
+	statusCode, body, err := performPluginDeleteRequest(pluginID, accountName)
+	if err != nil {
+		return err
+	}
+
+	if statusCode == http.StatusNotFound {
+		print_warning("No existing deployment found on server – continuing with deploy")
+		return nil
+	}
+
+	if statusCode != http.StatusOK {
+		message := extractAPIMessage(body)
+		if message == "" {
+			message = fmt.Sprintf("server returned status %d during delete", statusCode)
+		}
+		return fmt.Errorf("%s", message)
+	}
+
+	if len(body) == 0 {
+		return fmt.Errorf("empty response from server during delete")
+	}
+
+	var response PluginOperationResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("failed to decode delete response: %w", err)
+	}
+
+	if !response.Success {
+		message := response.Message
+		if message == "" {
+			message = "delete request failed"
+		}
+		return fmt.Errorf("%s", message)
+	}
+
+	print_success("Existing deployment removed")
+	return nil
+}
+
+func performPluginDeleteRequest(pluginID, accountName string) (int, []byte, error) {
+	account, err := getAccountConfig(accountName)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	serverURL := account.ServerURL
+	cloudSyncKey := account.CloudSyncKey
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+
+	return resp.StatusCode, body, nil
+}
+
+func extractAPIMessage(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if msg, ok := payload["message"]; ok {
+			switch v := msg.(type) {
+			case string:
+				if v != "" {
+					return v
+				}
+			default:
+				if marshaled, err := json.Marshal(v); err == nil {
+					text := strings.TrimSpace(string(marshaled))
+					if text != "" && text != "null" {
+						return text
+					}
+				}
+			}
+		}
+
+		if errMsg, ok := payload["error"].(string); ok && errMsg != "" {
+			return errMsg
+		}
+	}
+
+	return trimmed
+}
+
 func checkServerConfig(accountName string) bool {
 	// Get account configuration
 	_, err := getAccountConfig(accountName)
@@ -874,6 +992,33 @@ func createDeploymentPackage(pluginDir string, config *PluginConfig) (string, er
 	binaryName := filepath.Base(config.Plugin.BinaryPath)
 	if err := addFileToTar(tw, binaryPath, binaryName); err != nil {
 		return "", fmt.Errorf("failed to add binary %s to deployment package: %w", binaryName, err)
+	}
+
+	// Add UI files if UI is enabled
+	if config.Plugin.UIConfig != nil && config.Plugin.UIConfig.Enable && config.Plugin.UIConfig.DistPath != "" {
+		// Add the compiled UI file (dist/index.umd.js or whatever is in dist_path)
+		uiDistPath := filepath.Join(pluginDir, config.Plugin.UIConfig.DistPath)
+		if _, err := os.Stat(uiDistPath); err == nil {
+			// Preserve the directory structure: ui/dist/index.umd.js
+			tarPath := config.Plugin.UIConfig.DistPath
+			if err := addFileToTar(tw, uiDistPath, tarPath); err != nil {
+				return "", fmt.Errorf("failed to add UI dist file %s to deployment package: %w", tarPath, err)
+			}
+			print_status(fmt.Sprintf("✅ Added UI dist file: %s", tarPath))
+		} else {
+			print_warning(fmt.Sprintf("⚠️  UI dist file not found at %s, skipping UI deployment", uiDistPath))
+		}
+
+		// Add config.json if it exists in ui/ directory
+		uiConfigJSONPath := filepath.Join(pluginDir, "ui", "config.json")
+		if _, err := os.Stat(uiConfigJSONPath); err == nil {
+			if err := addFileToTar(tw, uiConfigJSONPath, "ui/config.json"); err != nil {
+				return "", fmt.Errorf("failed to add UI config.json to deployment package: %w", err)
+			}
+			print_status("✅ Added UI config.json")
+		} else {
+			print_warning("⚠️  UI config.json not found, skipping")
+		}
 	}
 
 	return packagePath, nil
@@ -1194,9 +1339,35 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read server response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		print_warning("Server rejected deployment (403). Use '--replace' to delete the existing plugin before redeploying.")
+		message := extractAPIMessage(body)
+		if message == "" {
+			message = "server returned 403 Forbidden"
+		}
+		return nil, fmt.Errorf("%s", message)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		message := extractAPIMessage(body)
+		if message == "" {
+			message = fmt.Sprintf("server returned status %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("%s", message)
+	}
+
+	if len(body) == 0 {
+		return nil, fmt.Errorf("server returned empty response")
+	}
+
 	var response PluginOperationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to decode server response: %w (body: %s)", err, strings.TrimSpace(string(body)))
 	}
 
 	return &response, nil

@@ -4,7 +4,7 @@
 
 - **Type**: Mach-O 64-bit executable arm64
 - **Size**: ~13.7 MB
-- **Go Version**: 1.25.0
+- **Go Version**: 1.25.4
 - **Build Mode**: CGO_ENABLED=1
 - **Architecture**: ARM64 (Apple Silicon)
 - **OS**: Darwin (macOS)

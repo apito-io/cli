@@ -71,9 +71,9 @@ var languageRuntimes = map[string]LanguageRuntime{
 			"go mod tidy",
 			"go build -o {binary_name} .",
 		},
-		DockerImage: "golang:1.25.0-alpine",
+		DockerImage: "golang:1.25.4-alpine",
 		DockerBuild: []string{
-			"docker run --rm -v {plugin_dir}:/workspace -w /workspace golang:1.25.0-alpine sh -c \"go mod tidy && go build -o {binary_name} .\"",
+			"docker run --rm -v {plugin_dir}:/workspace -w /workspace golang:1.25.4-alpine sh -c \"go mod tidy && go build -o {binary_name} .\"",
 		},
 		OutputPath:     "./{binary_name}",
 		RequiredFiles:  []string{"main.go", "go.mod"},
@@ -418,19 +418,19 @@ func executeGoBuildWithPlatform(pluginDir, binaryName string, buildType GoBuildT
 		// Build Docker command with platform support
 		var cmd *exec.Cmd
 		if targetPlatform.Platform != "" {
-			print_status(fmt.Sprintf("Running: docker run --platform %s --rm -v %s:/workspace -w /workspace golang:1.25.0-alpine sh -c '%s'",
+			print_status(fmt.Sprintf("Running: docker run --platform %s --rm -v %s:/workspace -w /workspace golang:1.25.4-alpine sh -c '%s'",
 				targetPlatform.Platform, pluginDir, shellCmd))
 			cmd = exec.Command("docker", "run", "--platform", targetPlatform.Platform, "--rm",
 				"-v", pluginDir+":/workspace",
 				"-w", "/workspace",
-				"golang:1.25.0-alpine",
+				"golang:1.25.4-alpine",
 				"sh", "-c", shellCmd)
 		} else {
-			print_status("Running: docker run --rm -v " + pluginDir + ":/workspace -w /workspace golang:1.25.0-alpine sh -c '" + shellCmd + "'")
+			print_status("Running: docker run --rm -v " + pluginDir + ":/workspace -w /workspace golang:1.25.4-alpine sh -c '" + shellCmd + "'")
 			cmd = exec.Command("docker", "run", "--rm",
 				"-v", pluginDir+":/workspace",
 				"-w", "/workspace",
-				"golang:1.25.0-alpine",
+				"golang:1.25.4-alpine",
 				"sh", "-c", shellCmd)
 		}
 		cmd.Stdout = os.Stdout

@@ -637,7 +637,7 @@ func initializePluginConfig() {
 	// Create account
 	cfg.Accounts[accountName] = AccountConfig{
 		ServerURL:    strings.TrimSuffix(serverURL, "/"),
-		CloudSyncKey: cloudSyncKey,
+		CloudSyncKey: "cli-" + cloudSyncKey, // this is mandatory prefix for cli sync key
 	}
 
 	// Set as default if it's the first account
