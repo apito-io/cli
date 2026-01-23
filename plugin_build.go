@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,7 +30,7 @@ var pluginBuildCmd = &cobra.Command{
 		if pluginDir == "" {
 			pluginDir = "."
 		}
-		buildPlugin(pluginDir)
+		buildPlugin(pluginDir, cmd)
 	},
 }
 
@@ -123,7 +124,7 @@ var languageRuntimes = map[string]LanguageRuntime{
 	},
 }
 
-func buildPlugin(pluginDir string) {
+func buildPlugin(pluginDir string, cmd *cobra.Command) {
 	print_step(fmt.Sprintf("🔨 Building Plugin in: %s", pluginDir))
 
 	// Read plugin configuration
@@ -158,10 +159,10 @@ func buildPlugin(pluginDir string) {
 	systemAvailable := checkSystemRuntime(runtime.SystemCheck)
 
 	// Determine build method
-	buildMethod := determineBuildMethod(runtime.Name, systemAvailable)
+	buildMethod := determineBuildMethod(cmd, runtime.Name, systemAvailable)
 
 	// Execute build
-	if err := executeBuild(pluginDir, config, runtime, buildMethod); err != nil {
+	if err := executeBuild(pluginDir, config, runtime, buildMethod, cmd); err != nil {
 		print_error("Build failed: " + err.Error())
 		return
 	}
@@ -174,6 +175,14 @@ func buildPlugin(pluginDir string) {
 
 	print_success("✅ Plugin built successfully!")
 	print_status(fmt.Sprintf("Binary location: %s", getBinaryPath(pluginDir, config.Plugin.BinaryPath)))
+
+	// Check if UI build is needed
+	if shouldBuildUI(config) {
+		if err := buildUI(pluginDir, config); err != nil {
+			print_warning(fmt.Sprintf("UI build failed: %v", err))
+			print_status("You can build the UI manually later")
+		}
+	}
 
 	// Show next steps
 	showNextSteps(config.Plugin.ID)
@@ -221,7 +230,99 @@ func checkSystemRuntime(checkCommand string) bool {
 	return true
 }
 
-func determineBuildMethod(languageName string, systemAvailable bool) BuildMethod {
+// Validation helper functions for flags
+
+func validateBuildMethod(value string) (BuildMethod, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "system":
+		return BuildMethodSystem, nil
+	case "docker":
+		return BuildMethodDocker, nil
+	default:
+		return "", fmt.Errorf("invalid build method: %s (must be 'system' or 'docker')", value)
+	}
+}
+
+func validatePlatformArch(os, arch string) (PlatformTarget, error) {
+	normalizedOS := strings.ToLower(strings.TrimSpace(os))
+	normalizedArch := strings.ToLower(strings.TrimSpace(arch))
+
+	// If arch is not provided, try to find a default or use host arch
+	if normalizedArch == "" {
+		normalizedArch = runtime.GOARCH
+	}
+
+	// Search for matching platform
+	for _, platform := range supportedPlatforms {
+		if strings.ToLower(platform.OS) == normalizedOS && strings.ToLower(platform.Arch) == normalizedArch {
+			return platform, nil
+		}
+	}
+
+	// If not found, try to construct a basic platform target
+	// This allows for custom combinations that might not be in supportedPlatforms
+	if normalizedOS == "linux" || normalizedOS == "darwin" || normalizedOS == "windows" {
+		if normalizedArch == "amd64" || normalizedArch == "arm64" {
+			platformStr := ""
+			if normalizedOS == "linux" {
+				platformStr = fmt.Sprintf("linux/%s", normalizedArch)
+			}
+			// Format OS name for display
+			osDisplay := normalizedOS
+			if normalizedOS == "darwin" {
+				osDisplay = "macOS"
+			} else if normalizedOS == "linux" {
+				osDisplay = "Linux"
+			} else if normalizedOS == "windows" {
+				osDisplay = "Windows"
+			}
+			return PlatformTarget{
+				OS:       normalizedOS,
+				Arch:     normalizedArch,
+				Display:  fmt.Sprintf("%s %s", osDisplay, strings.ToUpper(normalizedArch)),
+				Platform: platformStr,
+			}, nil
+		}
+	}
+
+	return PlatformTarget{}, fmt.Errorf("invalid platform/arch combination: %s/%s (supported: linux/darwin/windows with amd64/arm64)", os, arch)
+}
+
+func validateGoBuildType(value string) (GoBuildType, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "debug":
+		return GoBuildDebug, nil
+	case "develop", "development":
+		return GoBuildDevelop, nil
+	case "production":
+		return GoBuildProduction, nil
+	default:
+		return "", fmt.Errorf("invalid build type: %s (must be 'debug', 'develop', or 'production')", value)
+	}
+}
+
+func determineBuildMethod(cmd *cobra.Command, languageName string, systemAvailable bool) BuildMethod {
+	// Check for --build flag first
+	buildFlag, _ := cmd.Flags().GetString("build")
+	if buildFlag != "" {
+		method, err := validateBuildMethod(buildFlag)
+		if err != nil {
+			print_error(err.Error())
+			print_warning("Falling back to interactive selection")
+		} else {
+			// Validate that system build is available if requested
+			if method == BuildMethodSystem && !systemAvailable {
+				print_warning(fmt.Sprintf("%s runtime not found on system, but --build=system was specified", languageName))
+				print_warning("Falling back to Docker build")
+				return BuildMethodDocker
+			}
+			return method
+		}
+	}
+
+	// If no flag or validation failed, use interactive prompt
 	if !systemAvailable {
 		print_status(fmt.Sprintf("%s runtime not found on system, using Docker", languageName))
 		return BuildMethodDocker
@@ -267,7 +368,22 @@ var supportedPlatforms = []PlatformTarget{
 	{OS: runtime.GOOS, Arch: runtime.GOARCH, Display: fmt.Sprintf("Host OS (%s/%s)", runtime.GOOS, runtime.GOARCH), Platform: ""},
 }
 
-func selectTargetPlatform() PlatformTarget {
+func selectTargetPlatform(cmd *cobra.Command) PlatformTarget {
+	// Check for --platform and --arch flags first
+	platformFlag, _ := cmd.Flags().GetString("platform")
+	archFlag, _ := cmd.Flags().GetString("arch")
+
+	if platformFlag != "" {
+		platform, err := validatePlatformArch(platformFlag, archFlag)
+		if err != nil {
+			print_error(err.Error())
+			print_warning("Falling back to interactive selection")
+		} else {
+			return platform
+		}
+	}
+
+	// If no flags or validation failed, use interactive prompt
 	var items []string
 	for _, platform := range supportedPlatforms {
 		items = append(items, platform.Display)
@@ -293,7 +409,20 @@ func selectTargetPlatform() PlatformTarget {
 	return supportedPlatforms[idx]
 }
 
-func determineGoBuildType(systemAvailable bool) GoBuildType {
+func determineGoBuildType(cmd *cobra.Command, systemAvailable bool) GoBuildType {
+	// Check for --type flag first
+	typeFlag, _ := cmd.Flags().GetString("type")
+	if typeFlag != "" {
+		buildType, err := validateGoBuildType(typeFlag)
+		if err != nil {
+			print_error(err.Error())
+			print_warning("Falling back to interactive selection")
+		} else {
+			return buildType
+		}
+	}
+
+	// If no flag or validation failed, use interactive prompt
 	prompt := promptui.Select{
 		Label: "Choose Go build type",
 		Items: []string{
@@ -321,7 +450,7 @@ func determineGoBuildType(systemAvailable bool) GoBuildType {
 	}
 }
 
-func executeBuild(pluginDir string, config *PluginConfig, runtime LanguageRuntime, method BuildMethod) error {
+func executeBuild(pluginDir string, config *PluginConfig, runtime LanguageRuntime, method BuildMethod, cmd *cobra.Command) error {
 	language := strings.ToLower(config.Plugin.Language)
 	binaryName := config.Plugin.BinaryPath
 	if binaryName == "" {
@@ -330,10 +459,10 @@ func executeBuild(pluginDir string, config *PluginConfig, runtime LanguageRuntim
 
 	// For Go, use special build handling
 	if language == "go" {
-		buildType := determineGoBuildType(method == BuildMethodSystem)
+		buildType := determineGoBuildType(cmd, method == BuildMethodSystem)
 		absPluginDir, _ := filepath.Abs(pluginDir)
 
-		if err := executeGoBuild(absPluginDir, binaryName, buildType, method); err != nil {
+		if err := executeGoBuild(absPluginDir, binaryName, buildType, method, cmd); err != nil {
 			return err
 		}
 
@@ -390,9 +519,9 @@ func executeBuild(pluginDir string, config *PluginConfig, runtime LanguageRuntim
 	return nil
 }
 
-func executeGoBuild(pluginDir, binaryName string, buildType GoBuildType, method BuildMethod) error {
+func executeGoBuild(pluginDir, binaryName string, buildType GoBuildType, method BuildMethod, cmd *cobra.Command) error {
 	// Select target platform for cross-compilation
-	targetPlatform := selectTargetPlatform()
+	targetPlatform := selectTargetPlatform(cmd)
 	print_status(fmt.Sprintf("🎯 Target Platform: %s", targetPlatform.Display))
 
 	return executeGoBuildWithPlatform(pluginDir, binaryName, buildType, method, targetPlatform)
@@ -601,7 +730,227 @@ func init() {
 	// Add --dir flag to build command
 	pluginBuildCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
 
+	// Add build method flag
+	pluginBuildCmd.Flags().StringP("build", "b", "", "Build method: system or docker (skips interactive prompt)")
+
+	// Add platform flags
+	pluginBuildCmd.Flags().StringP("platform", "p", "", "Target OS: linux, darwin, or windows (skips interactive prompt)")
+	pluginBuildCmd.Flags().String("arch", "", "Target architecture: amd64 or arm64 (skips interactive prompt)")
+
+	// Add build type flag (for Go plugins)
+	pluginBuildCmd.Flags().StringP("type", "t", "", "Go build type: debug, develop, or production (skips interactive prompt)")
+
 	// Add build command to plugin commands
 	pluginCmd.AddCommand(pluginBuildCmd)
 	pluginCmd.AddCommand(pluginEnvCmd)
+}
+
+// UI Build Functions
+
+// shouldBuildUI checks if UI build is needed based on config
+func shouldBuildUI(config *PluginConfig) bool {
+	if config.Plugin.UIConfig == nil {
+		return false
+	}
+	if !config.Plugin.UIConfig.Enable {
+		return false
+	}
+	if config.Plugin.UIConfig.DistPath == "" {
+		return false
+	}
+	return true
+}
+
+// getUIFolder extracts the UI folder path from dist_path
+// e.g., "ui/dist/index.umd.js" -> "ui"
+func getUIFolder(distPath string) string {
+	parts := strings.Split(distPath, string(filepath.Separator))
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return "ui" // default
+}
+
+// PackageJSON represents the structure of package.json
+type PackageJSON struct {
+	Scripts map[string]string `json:"scripts"`
+}
+
+// checkUIBuildRequirements checks if UI can be built
+func checkUIBuildRequirements(pluginDir string, uiFolder string) (bool, string, error) {
+	uiDir := filepath.Join(pluginDir, uiFolder)
+	packageJSONPath := filepath.Join(uiDir, "package.json")
+
+	// Check if package.json exists
+	if _, err := os.Stat(packageJSONPath); os.IsNotExist(err) {
+		return false, "", fmt.Errorf("package.json not found in %s", uiFolder)
+	}
+
+	// Read and parse package.json
+	data, err := os.ReadFile(packageJSONPath)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to read package.json: %w", err)
+	}
+
+	var pkgJSON PackageJSON
+	if err := json.Unmarshal(data, &pkgJSON); err != nil {
+		return false, "", fmt.Errorf("failed to parse package.json: %w", err)
+	}
+
+	// Check if build script exists
+	if pkgJSON.Scripts == nil {
+		return false, "", fmt.Errorf("no scripts found in package.json")
+	}
+
+	buildScript, hasBuild := pkgJSON.Scripts["build"]
+	if !hasBuild {
+		return false, "", fmt.Errorf("no 'build' script found in package.json")
+	}
+
+	return true, buildScript, nil
+}
+
+// askUserToBuildUI prompts user if they want to build UI
+func askUserToBuildUI() bool {
+	prompt := promptui.Select{
+		Label: "UI configuration detected. Build UI as well?",
+		Items: []string{"Yes", "No"},
+	}
+
+	idx, _, err := prompt.Run()
+	if err != nil {
+		return false
+	}
+
+	return idx == 0
+}
+
+// determineUIBuildMethod determines if we should use system (pnpm) or Docker
+func determineUIBuildMethod() BuildMethod {
+	// Check if pnpm is available
+	pnpmAvailable := checkSystemRuntime("pnpm --version")
+
+	if !pnpmAvailable {
+		print_status("pnpm not found on system, will use Docker")
+		return BuildMethodDocker
+	}
+
+	print_status("pnpm detected on system")
+
+	// Ask user for preference
+	prompt := promptui.Select{
+		Label: "Choose UI build method",
+		Items: []string{
+			"System pnpm (faster)",
+			"Docker (consistent, isolated)",
+		},
+	}
+
+	idx, _, err := prompt.Run()
+	if err != nil {
+		print_warning("Selection failed, defaulting to Docker build")
+		return BuildMethodDocker
+	}
+
+	if idx == 0 {
+		return BuildMethodSystem
+	}
+	return BuildMethodDocker
+}
+
+// buildUI handles the UI build process
+func buildUI(pluginDir string, config *PluginConfig) error {
+	print_step("🎨 Building Plugin UI")
+
+	uiFolder := getUIFolder(config.Plugin.UIConfig.DistPath)
+	uiDir := filepath.Join(pluginDir, uiFolder)
+
+	// Check if UI folder exists
+	if _, err := os.Stat(uiDir); os.IsNotExist(err) {
+		return fmt.Errorf("UI folder '%s' not found", uiFolder)
+	}
+
+	// Check build requirements
+	canBuild, buildScript, err := checkUIBuildRequirements(pluginDir, uiFolder)
+	if !canBuild {
+		if err != nil {
+			print_warning(fmt.Sprintf("UI build requirements not met: %v", err))
+		}
+		return err
+	}
+
+	print_status(fmt.Sprintf("Found build script: %s", buildScript))
+
+	// Ask user if they want to build UI
+	if !askUserToBuildUI() {
+		print_status("Skipping UI build")
+		return nil
+	}
+
+	// Determine build method
+	buildMethod := determineUIBuildMethod()
+
+	// Execute UI build
+	if err := executeUIBuild(uiDir, buildMethod); err != nil {
+		return fmt.Errorf("UI build failed: %w", err)
+	}
+
+	// Validate UI build output
+	expectedOutput := filepath.Join(pluginDir, config.Plugin.UIConfig.DistPath)
+	if _, err := os.Stat(expectedOutput); os.IsNotExist(err) {
+		return fmt.Errorf("expected UI output not found at: %s", expectedOutput)
+	}
+
+	print_success("✅ UI built successfully!")
+	print_status(fmt.Sprintf("UI output location: %s", expectedOutput))
+
+	return nil
+}
+
+// executeUIBuild executes the UI build using the selected method
+func executeUIBuild(uiDir string, method BuildMethod) error {
+	absUIDir, _ := filepath.Abs(uiDir)
+
+	if method == BuildMethodDocker {
+		if !checkDockerAvailable() {
+			return fmt.Errorf("docker is not available, please install Docker or use system build")
+		}
+
+		print_status("Building UI with Docker (node:18-alpine)")
+		// Try pnpm first, fallback to npm if pnpm fails
+		// Install pnpm globally in container, then use it
+		shellCmd := "npm install -g pnpm && pnpm install && pnpm build || (npm install && npm run build)"
+		print_status(fmt.Sprintf("Running: docker run --rm -v %s:/workspace -w /workspace node:18-alpine sh -c '%s'", absUIDir, shellCmd))
+
+		cmd := exec.Command("docker", "run", "--rm",
+			"-v", absUIDir+":/workspace",
+			"-w", "/workspace",
+			"node:18-alpine",
+			"sh", "-c", shellCmd)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	// System build with pnpm
+	print_status("Building UI with system pnpm")
+	print_status("Running: pnpm install")
+	installCmd := exec.Command("pnpm", "install")
+	installCmd.Dir = uiDir
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	if err := installCmd.Run(); err != nil {
+		return fmt.Errorf("pnpm install failed: %w", err)
+	}
+
+	print_status("Running: pnpm build")
+	buildCmd := exec.Command("pnpm", "build")
+	buildCmd.Dir = uiDir
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+	if err := buildCmd.Run(); err != nil {
+		return fmt.Errorf("pnpm build failed: %w", err)
+	}
+
+	return nil
 }

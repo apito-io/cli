@@ -33,6 +33,148 @@ apito [command] [flags]
 - `stop` - Stop Apito services
 - `update` - Update apito engine, console, or self
 
+## Plugin Build Architecture
+
+### Command Flow
+
+```
+apito plugin build [plugin-directory] [flags]
+```
+
+### Flags
+
+- `-d, --dir string` - Plugin directory (alternative to positional argument)
+- `-b, --build string` - Build method: system or docker (skips interactive prompt)
+- `-p, --platform string` - Target OS: linux, darwin, or windows (skips interactive prompt)
+- `--arch string` - Target architecture: amd64 or arm64 (skips interactive prompt)
+- `-t, --type string` - Go build type: debug, develop, or production (skips interactive prompt)
+
+### Execution Flow
+
+#### 1. Command Parsing
+
+```go
+// plugin_build.go
+pluginBuildCmd.Run = func(cmd *cobra.Command, args []string) {
+    pluginDir, _ := cmd.Flags().GetString("dir")
+    if pluginDir == "" && len(args) > 0 {
+        pluginDir = args[0]
+    }
+    if pluginDir == "" {
+        pluginDir = "."
+    }
+    buildPlugin(pluginDir, cmd)
+}
+```
+
+#### 2. Flag Processing Pattern
+
+The build command follows the same pattern as `--account` flag: flags are checked first, then fall back to interactive prompts if not provided.
+
+```go
+func determineBuildMethod(cmd *cobra.Command, languageName string, systemAvailable bool) BuildMethod {
+    // Check for --build flag first
+    buildFlag, _ := cmd.Flags().GetString("build")
+    if buildFlag != "" {
+        method, err := validateBuildMethod(buildFlag)
+        if err != nil {
+            print_error(err.Error())
+            print_warning("Falling back to interactive selection")
+        } else {
+            // Validate that system build is available if requested
+            if method == BuildMethodSystem && !systemAvailable {
+                print_warning("Runtime not found, falling back to Docker")
+                return BuildMethodDocker
+            }
+            return method
+        }
+    }
+    
+    // If no flag or validation failed, use interactive prompt
+    // ... interactive selection logic
+}
+```
+
+#### 3. Platform Selection
+
+```go
+func selectTargetPlatform(cmd *cobra.Command) PlatformTarget {
+    // Check for --platform and --arch flags first
+    platformFlag, _ := cmd.Flags().GetString("platform")
+    archFlag, _ := cmd.Flags().GetString("arch")
+    
+    if platformFlag != "" {
+        platform, err := validatePlatformArch(platformFlag, archFlag)
+        if err != nil {
+            print_error(err.Error())
+            print_warning("Falling back to interactive selection")
+        } else {
+            return platform
+        }
+    }
+    
+    // If no flags or validation failed, use interactive prompt
+    // ... interactive selection logic
+}
+```
+
+#### 4. Build Type Selection (Go Only)
+
+```go
+func determineGoBuildType(cmd *cobra.Command, systemAvailable bool) GoBuildType {
+    // Check for --type flag first
+    typeFlag, _ := cmd.Flags().GetString("type")
+    if typeFlag != "" {
+        buildType, err := validateGoBuildType(typeFlag)
+        if err != nil {
+            print_error(err.Error())
+            print_warning("Falling back to interactive selection")
+        } else {
+            return buildType
+        }
+    }
+    
+    // If no flag or validation failed, use interactive prompt
+    // ... interactive selection logic
+}
+```
+
+#### 5. Validation Functions
+
+```go
+func validateBuildMethod(value string) (BuildMethod, error) {
+    normalized := strings.ToLower(strings.TrimSpace(value))
+    switch normalized {
+    case "system":
+        return BuildMethodSystem, nil
+    case "docker":
+        return BuildMethodDocker, nil
+    default:
+        return "", fmt.Errorf("invalid build method: %s (must be 'system' or 'docker')", value)
+    }
+}
+
+func validatePlatformArch(os, arch string) (PlatformTarget, error) {
+    // Validates platform/arch combination
+    // Searches supportedPlatforms for match
+    // Falls back to constructing PlatformTarget if valid combination
+}
+
+func validateGoBuildType(value string) (GoBuildType, error) {
+    normalized := strings.ToLower(strings.TrimSpace(value))
+    switch normalized {
+    case "debug":
+        return GoBuildDebug, nil
+    case "develop", "development":
+        return GoBuildDevelop, nil
+    case "production":
+        return GoBuildProduction, nil
+    default:
+        return "", fmt.Errorf("invalid build type: %s (must be 'debug', 'develop', or 'production')", value)
+    }
+}
+```
+
 ## Plugin Deploy Architecture
 
 ### Command Flow

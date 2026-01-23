@@ -658,7 +658,11 @@ apito plugin <command> [options]
 **Options:**
 
 - `--account, -a` - Specify account to use for plugin operations (optional, uses default if not specified)
-- `--dir, -d` - Plugin directory (for deploy/update commands)
+- `--dir, -d` - Plugin directory (for deploy/update/build commands)
+- `--build, -b` - Build method: `system` or `docker` (for `build` command, skips interactive prompt)
+- `--platform, -p` - Target OS: `linux`, `darwin`, or `windows` (for `build` command, skips interactive prompt)
+- `--arch` - Target architecture: `amd64` or `arm64` (for `build` command, skips interactive prompt)
+- `--type, -t` - Go build type: `debug`, `develop`, or `production` (for `build` command, skips interactive prompt)
 
 **Features:**
 
@@ -721,6 +725,10 @@ apito plugin build
 # > Choose build method: System Go / Docker
 # > (For Go) Choose build type: Debug / Development / Production
 
+# Build plugin non-interactively (for automation/CI)
+apito plugin build --build system --platform linux --arch amd64 --type production
+apito plugin build -b docker -p linux --arch arm64 -t debug
+
 # Deploy from current directory (requires confirmation)
 apito plugin deploy
 
@@ -744,7 +752,12 @@ apito plugin status hc-file-processor --account staging
 
 **Plugin Build System:**
 
-The build system automatically detects the plugin language from `config.yml` and provides appropriate build options:
+The build system automatically detects the plugin language from `config.yml` and provides appropriate build options. It supports both interactive and non-interactive modes, similar to the `--account` flag pattern.
+
+**Build Modes:**
+
+- **Interactive Mode** (default): When no flags are provided, the CLI shows interactive prompts for build options
+- **Non-Interactive Mode**: When flags are provided, the CLI skips prompts and uses flag values directly
 
 **Go Plugins:**
 
@@ -753,15 +766,42 @@ The build system automatically detects the plugin language from `config.yml` and
 apito plugin build
 # Options:
 # - System vs Docker build
-# - Debug (with debug symbols)
-# - Development (basic build, GOOS=linux)
-# - Production (static binary, CGO_ENABLED=0)
+# - Target platform (Linux AMD64, Linux ARM64, macOS, Windows, Host OS)
+# - Build type: Debug / Development / Production
+
+# Build Go plugin non-interactively (for automation/CI/CD)
+apito plugin build --build system --platform linux --arch amd64 --type production
+apito plugin build -b docker -p linux --arch arm64 -t debug
+apito plugin build --build system --platform darwin --arch arm64 --type develop
+
+# Partially interactive (only build method specified)
+apito plugin build --build docker
+# Will still prompt for platform and build type
 
 # Examples of actual build commands used:
 # Debug: go build -gcflags="all=-N -l" -o hc-plugin-name .
-# Development: GOOS=linux go build -o hc-plugin-name .
+# Development: GOOS=linux GOARCH=amd64 go build -o hc-plugin-name .
 # Production: CGO_ENABLED=0 go build -ldflags "-s" -a -o hc-plugin-name .
 ```
+
+**Build Flags:**
+
+- `--build, -b`: Build method (`system` or `docker`)
+  - If not specified, prompts interactively
+  - If `system` is specified but runtime not available, falls back to Docker with warning
+  
+- `--platform, -p`: Target operating system (`linux`, `darwin`, `windows`)
+  - If not specified, prompts interactively
+  - Must be used with `--arch` for non-interactive mode
+  
+- `--arch`: Target architecture (`amd64`, `arm64`)
+  - If not specified with `--platform`, uses host architecture
+  - Validates platform/arch combinations
+  
+- `--type, -t`: Go build type (`debug`, `develop`, `production`)
+  - If not specified, prompts interactively
+  - Only applies to Go plugins
+  - Accepts: `debug`, `develop`/`development`, `production`
 
 **JavaScript Plugins:**
 
@@ -1522,7 +1562,9 @@ apito plugin env                     # Check available build tools
 
 # Build issues (for Go plugins)
 cd hc-your-plugin
-apito plugin build                   # Use CLI build system
+apito plugin build                   # Use CLI build system (interactive)
+# Non-interactive build for automation/CI:
+apito plugin build --build system --platform linux --arch amd64 --type production
 # Alternative manual build:
 go mod tidy                         # Fix dependencies
 go build -o hc-your-plugin .        # Test local build
@@ -1531,17 +1573,20 @@ go build -o hc-your-plugin .        # Test local build
 cd hc-your-plugin-js
 npm install                         # Install dependencies manually
 node --check index.js               # Check syntax
-apito plugin build                  # Use CLI build system
+apito plugin build                  # Use CLI build system (interactive)
+apito plugin build --build system   # Non-interactive: use system Node.js
 
 # Build issues (for Python plugins)
 cd hc-your-plugin-py
 pip3 install -r requirements.txt    # Install dependencies manually
 python3 -m py_compile main.py       # Check syntax
-apito plugin build                  # Use CLI build system
+apito plugin build                  # Use CLI build system (interactive)
+apito plugin build --build docker   # Non-interactive: force Docker build
 
 # Docker build issues
 docker --version                    # Check Docker availability
-apito plugin build                  # Select system build if Docker fails
+apito plugin build                  # Interactive: select system build if Docker fails
+apito plugin build --build system   # Non-interactive: force system build
 
 # Plugin deployment authentication
 apito config set cloud_sync_key <your-key>  # Update auth key
