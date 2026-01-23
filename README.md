@@ -772,7 +772,7 @@ apito plugin build
 # Build Go plugin non-interactively (for automation/CI/CD)
 apito plugin build --build system --platform linux --arch amd64 --type production
 apito plugin build -b docker -p linux --arch arm64 -t debug
-apito plugin build --build system --platform darwin --arch arm64 --type develop
+apito plugin build --build system -p darwin --arch arm64 --type develop
 
 # Partially interactive (only build method specified)
 apito plugin build --build docker

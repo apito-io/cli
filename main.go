@@ -22,7 +22,7 @@ func main() {
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	var project string
-	rootCmd.PersistentFlags().StringVarP(&project, "project", "p", "", "ver")
+	rootCmd.PersistentFlags().StringVar(&project, "project", "", "ver")
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(createCmd)
