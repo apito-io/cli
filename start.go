@@ -214,6 +214,10 @@ func startApito() {
 
 		// Docker mode - start services
 		print_step("🐳 Starting Docker Services")
+		if err := ensureEnvFileReady(); err != nil {
+			print_error("Failed to ensure .env file: " + err.Error())
+			return
+		}
 		if err := ensureDockerAndComposeAvailable(); err != nil {
 			print_error("Docker not available: " + err.Error())
 			return

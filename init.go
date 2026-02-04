@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
-	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -194,6 +193,15 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 		defaultSaaSProjectDBPath = filepath.Join(dbDataDir, "apito_saas_project.db")
 	}
 
+	// If .env exists as a directory (Docker creates it when bind-mount target is missing),
+	// remove it so we can create a proper file.
+	if info, err := os.Stat(configFile); err == nil && info.IsDir() {
+		if err := os.RemoveAll(configFile); err != nil {
+			return fmt.Errorf("error removing .env directory (was created by Docker): %w", err)
+		}
+		print_status("Removed .env directory, creating configuration file...")
+	}
+
 	// Check if config file exists
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		print_status("Creating system configuration file...")
@@ -241,6 +249,30 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 	}
 
 	return nil
+}
+
+// ensureEnvFileReady guarantees ~/.apito/bin/.env exists as a file (not a directory).
+// Docker creates bind-mount targets as directories when they don't exist; this repairs that.
+// Call before any Docker operation that mounts .env.
+func ensureEnvFileReady() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("error finding home directory: %w", err)
+	}
+	apitoBinDir := filepath.Join(homeDir, ".apito", "bin")
+	envPath := filepath.Join(apitoBinDir, ".env")
+
+	if err := os.MkdirAll(apitoBinDir, 0755); err != nil {
+		return fmt.Errorf("error creating bin directory: %w", err)
+	}
+
+	if info, err := os.Stat(envPath); err == nil && info.IsDir() {
+		if err := os.RemoveAll(envPath); err != nil {
+			return fmt.Errorf("error removing .env directory: %w", err)
+		}
+	}
+
+	return ensureDefaultEnvironmentConfig("docker")
 }
 
 func validateSystemDatabase() error {
@@ -461,19 +493,22 @@ func promptForEnvironmentConfig(config map[string]string) error {
 	return nil
 }
 
+// generateBrankaKey produces exactly 32 bytes for AES-256, matching engine requirements
+// (branca token, project key manager). Uses crypto/rand for secure generation.
 func generateBrankaKey() string {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
 	const keyLength = 32
 
+	bytes := make([]byte, keyLength)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback: deterministic but ensures 32 bytes (avoid panic in engine)
+		for i := range bytes {
+			bytes[i] = charset[i%len(charset)]
+		}
+	}
 	result := make([]byte, keyLength)
 	for i := range result {
-		randomIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			// Fallback to a simple random selection if crypto/rand fails
-			result[i] = charset[i%len(charset)]
-		} else {
-			result[i] = charset[randomIndex.Int64()]
-		}
+		result[i] = charset[int(bytes[i])%len(charset)]
 	}
 	return string(result)
 }

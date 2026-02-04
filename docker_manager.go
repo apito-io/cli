@@ -627,11 +627,12 @@ func writeComposeFile() (string, error) {
 	_ = os.Chmod(engineDataDir, 0777)
 
 	// Mount .env from ~/.apito/bin/.env into container workdir .env
-	// Note: .env file will be created by ensureDefaultEnvironmentConfig() in init.go
+	// Ensure .env exists as a file before Docker starts (Docker creates missing bind-mount targets as directories)
+	if err := ensureEnvFileReady(); err != nil {
+		return "", fmt.Errorf("failed to ensure .env file: %w", err)
+	}
 	envDir := filepath.Join(apitoDir, "bin")
-	_ = os.MkdirAll(envDir, 0755)
 	envFile := filepath.Join(envDir, ".env")
-	// Don't create empty .env file here - let init.go handle it with proper defaults
 
 	// Load CLI config to get version information
 	cfg, err := loadCLIConfig()
