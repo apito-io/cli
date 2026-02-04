@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -574,36 +575,33 @@ func dockerComposeDown() error {
 	return cmd.Run()
 }
 
-// dockerComposePs shows docker compose status
+// dockerComposePs shows docker compose status for engine and console
 func dockerComposePs() (bool, bool, error) {
 	if err := ensureDockerAndComposeAvailable(); err != nil {
 		return false, false, err
 	}
 
-	path, err := getComposeFilePath()
-	if err != nil {
-		return false, false, err
-	}
-
-	// Check if compose file exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return false, false, errors.New("no database compose file found")
-	}
-
-	// Try Docker Compose v2 first
-	cmd := exec.Command("docker", "compose", "-f", path, "ps", "--format", "json")
+	// Use docker ps to check if apito-engine and apito-console containers are running
+	// This works regardless of how the containers were started (compose file, manual, etc.)
+	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}")
 	out, err := cmd.Output()
 	if err != nil {
 		return false, false, err
 	}
 
-	// Parse output to check service status
-	_ = out // Suppress unused variable warning
 	engineRunning := false
 	consoleRunning := false
+	names := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		switch name {
+		case "apito-engine":
+			engineRunning = true
+		case "apito-console":
+			consoleRunning = true
+		}
+	}
 
-	// For now, return false for both since this is for database compose
-	// The main engine/console status is handled elsewhere
 	return engineRunning, consoleRunning, nil
 }
 
