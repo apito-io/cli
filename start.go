@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
-	"github.com/eiannone/keyboard"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -238,11 +237,10 @@ func startApito() {
 	print_success("🎉 Apito is now running!")
 	print_status("Engine: http://localhost:5050")
 	print_status("Console: http://localhost:4000")
-	print_status("Press Ctrl+C to stop all services")
+	print_status("Services run in the background.")
+	print_status("First time? Run 'apito logs engine' for login credentials.")
+	print_status("To stop services, run 'apito stop'")
 	fmt.Println()
-
-	// Wait for interrupt signal
-	waitForInterrupt()
 }
 
 func ensureEngineBinary() error {
@@ -827,33 +825,6 @@ func pidsForPort(port int) ([]string, error) {
 	}
 
 	return []string{}, nil
-}
-
-func waitForInterrupt() {
-	// Wait for Ctrl+C
-	if err := keyboard.Open(); err != nil {
-		return
-	}
-	defer keyboard.Close()
-
-	for {
-		char, key, err := keyboard.GetKey()
-		if err != nil {
-			return
-		}
-
-		if key == keyboard.KeyCtrlC {
-			print_status("Received Ctrl+C, stopping services...")
-			stopAllServices()
-			return
-		}
-
-		if char == 'q' {
-			print_status("Received 'q', stopping services...")
-			stopAllServices()
-			return
-		}
-	}
 }
 
 func stopAllServices() {

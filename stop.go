@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -40,8 +43,46 @@ var stopCmd = &cobra.Command{
 				print_error("Docker not available: " + err.Error())
 				return
 			}
-			_ = dockerComposeDown()
-			print_success("Docker services stopped")
+			containers, err := listApitoContainers()
+			if err != nil {
+				print_error("Failed to list containers: " + err.Error())
+				return
+			}
+			if len(containers) == 0 {
+				print_status("No Apito containers running")
+				return
+			}
+			print_status("Running Apito containers:")
+			for _, c := range containers {
+				fmt.Println("  - " + c)
+			}
+			items := append([]string{"All (stop all Apito services)"}, containers...)
+			sel := promptui.Select{
+				Label: "Select what to stop",
+				Items: items,
+			}
+			idx, choice, err := sel.Run()
+			if err != nil {
+				return
+			}
+			confirmPrompt := promptui.Prompt{
+				Label:     fmt.Sprintf("Stop %s?", choice),
+				IsConfirm: true,
+			}
+			if _, err := confirmPrompt.Run(); err != nil {
+				print_status("Cancelled")
+				return
+			}
+			if idx == 0 {
+				_ = dockerComposeDown()
+				print_success("Docker services stopped")
+			} else {
+				if err := dockerStopContainers([]string{containers[idx-1]}); err != nil {
+					print_error(err.Error())
+					return
+				}
+				print_success(containers[idx-1] + " stopped")
+			}
 			return
 		}
 		switch target {
@@ -97,12 +138,55 @@ var restartCmd = &cobra.Command{
 				print_error("Docker not available: " + err.Error())
 				return
 			}
-			_ = dockerComposeDown()
-			if err := dockerComposeUp(); err != nil {
-				print_error("Failed to start docker services: " + err.Error())
+			containers, err := listApitoContainers()
+			if err != nil {
+				print_error("Failed to list containers: " + err.Error())
 				return
 			}
-			print_success("Docker services restarted")
+			if len(containers) == 0 {
+				print_status("No Apito containers running")
+				return
+			}
+			print_status("Running Apito containers:")
+			for _, c := range containers {
+				fmt.Println("  - " + c)
+			}
+			items := append([]string{"All (restart all Apito services)"}, containers...)
+			sel := promptui.Select{
+				Label: "Select what to restart",
+				Items: items,
+			}
+			idx, choice, err := sel.Run()
+			if err != nil {
+				return
+			}
+			confirmPrompt := promptui.Prompt{
+				Label:     fmt.Sprintf("Restart %s?", choice),
+				IsConfirm: true,
+			}
+			if _, err := confirmPrompt.Run(); err != nil {
+				print_status("Cancelled")
+				return
+			}
+			if idx == 0 {
+				_ = dockerComposeDown()
+				if err := dockerComposeUp(); err != nil {
+					print_error("Failed to start docker services: " + err.Error())
+					return
+				}
+				print_success("Docker services restarted")
+			} else {
+				containerName := containers[idx-1]
+				if err := dockerStopContainers([]string{containerName}); err != nil {
+					print_error(err.Error())
+					return
+				}
+				if err := dockerStartContainers([]string{containerName}); err != nil {
+					print_error(err.Error())
+					return
+				}
+				print_success(containerName + " restarted")
+			}
 			return
 		}
 		switch target {

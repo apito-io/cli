@@ -605,6 +605,51 @@ func dockerComposePs() (bool, bool, error) {
 	return engineRunning, consoleRunning, nil
 }
 
+// listApitoContainers returns running Docker container names matching apito*
+func listApitoContainers() ([]string, error) {
+	if err := ensureDockerAndComposeAvailable(); err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("docker", "ps", "--filter", "name=apito", "--format", "{{.Names}}")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+	names := strings.Split(strings.TrimSpace(string(out)), "\n")
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name != "" && strings.HasPrefix(name, "apito") {
+			result = append(result, name)
+		}
+	}
+	return result, nil
+}
+
+// dockerStopContainers stops the given container names
+func dockerStopContainers(names []string) error {
+	for _, name := range names {
+		cmd := exec.Command("docker", "stop", name)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to stop %s: %w", name, err)
+		}
+		print_status("Stopped " + name)
+	}
+	return nil
+}
+
+// dockerStartContainers starts the given container names
+func dockerStartContainers(names []string) error {
+	for _, name := range names {
+		cmd := exec.Command("docker", "start", name)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to start %s: %w", name, err)
+		}
+		print_status("Started " + name)
+	}
+	return nil
+}
+
 // writeComposeFile creates the main docker-compose.yml for engine and console
 func writeComposeFile() (string, error) {
 	if err := ensureDockerAndComposeAvailable(); err != nil {
