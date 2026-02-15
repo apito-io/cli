@@ -65,6 +65,8 @@ var pluginDeployCmd = &cobra.Command{
 		}
 
 		forceReplace, _ := cmd.Flags().GetBool("replace")
+		force, _ := cmd.Flags().GetBool("force")
+		forceReplace = forceReplace || force
 
 		deployPlugin(pluginDir, accountName, forceReplace)
 	},
@@ -271,7 +273,8 @@ func init() {
 
 	// Add --account flags to all plugin commands
 	pluginDeployCmd.Flags().StringP("account", "a", "", "Account to use for deployment")
-	pluginDeployCmd.Flags().Bool("replace", false, "Delete existing plugin before deployment")
+	pluginDeployCmd.Flags().Bool("replace", false, "Delete existing plugin before deployment (force replace)")
+	pluginDeployCmd.Flags().BoolP("force", "f", false, "Same as --replace: delete existing plugin before deployment")
 	pluginUpdateCmd.Flags().StringP("account", "a", "", "Account to use for update")
 	pluginListCmd.Flags().StringP("account", "a", "", "Account to use for listing")
 	pluginStatusCmd.Flags().StringP("account", "a", "", "Account to use for status check")
@@ -280,6 +283,7 @@ func init() {
 	pluginDeleteCmd.Flags().StringP("account", "a", "", "Account to use for deletion")
 
 	// Add plugin commands to plugin group
+	pluginCmd.AddCommand(pluginAddCmd)
 	pluginCmd.AddCommand(pluginCreateCmd)
 	pluginCmd.AddCommand(pluginDeployCmd)
 	pluginCmd.AddCommand(pluginUpdateCmd)
@@ -420,6 +424,9 @@ func deployPlugin(pluginDir, accountName string, forceReplace bool) {
 		print_error("Deployment failed: " + response.Message)
 		if response.Error != "" {
 			print_error("Error details: " + response.Error)
+		}
+		if strings.Contains(strings.ToLower(response.Message+response.Error), "failed to load") {
+			print_warning("Tip: If the previous deployment is stuck, use '--replace' or '--force' to delete and redeploy.")
 		}
 	}
 }
@@ -1345,7 +1352,7 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
-		print_warning("Server rejected deployment (403). Use '--replace' to delete the existing plugin before redeploying.")
+		print_warning("Server rejected deployment (403). Use '--replace' or '--force' to delete the existing plugin before redeploying.")
 		message := extractAPIMessage(body)
 		if message == "" {
 			message = "server returned 403 Forbidden"

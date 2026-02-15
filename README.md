@@ -73,6 +73,7 @@
 
 ### 🔌 **Plugin Management System**
 
+- **Add from Registry**: Install plugins with `apito plugin add <name>` from the official registry or any GitHub URL
 - **Hot Reload Plugins**: Deploy and update HashiCorp plugins without server restarts
 - **Multi-language Support**: Create plugins in Go, JavaScript, or Python
 - **Secure Deployment**: Cloud sync key authentication for plugin operations
@@ -643,6 +644,7 @@ apito plugin <command> [options]
 
 **Commands:**
 
+- `add <plugin-name-or-github-url>` - Add a plugin from the official registry or a GitHub repository (downloads latest release and deploys) ⚠️ _Requires confirmation_
 - `create` - Create a new plugin scaffold
 - `build [directory]` - Build plugin based on language configuration
 - `deploy [directory]` - Deploy plugin to server ⚠️ _Requires confirmation_
@@ -658,6 +660,7 @@ apito plugin <command> [options]
 **Options:**
 
 - `--account, -a` - Specify account to use for plugin operations (optional, uses default if not specified)
+- `--replace` - Delete existing plugin before deployment (for `add` and `deploy` commands)
 - `--dir, -d` - Plugin directory (for deploy/update/build commands)
 - `--build, -b` - Build method: `system` or `docker` (for `build` command, skips interactive prompt)
 - `--platform, -p` - Target OS: `linux`, `darwin`, or `windows` (for `build` command, skips interactive prompt)
@@ -673,6 +676,22 @@ apito plugin <command> [options]
 - **Real-time Status**: Live plugin status monitoring and health checks
 - **Template Generation**: Scaffold creation with best practices
 - **Confirmation System**: Sensitive operations require explicit confirmation with detailed operation information
+
+**Add Plugin from Registry or GitHub:**
+
+```bash
+# Add official plugin by name (from registry)
+apito plugin add hc-auth-plugin
+
+# Add plugin from GitHub URL
+apito plugin add https://github.com/udhvabon/hc-prottoy-plugin
+apito plugin add https://github.com/udhvabon/hc-prottoy-plugin.git
+
+# Add with account and replace existing deployment
+apito plugin add hc-auth-plugin --account production --replace
+```
+
+The `add` command fetches the latest release from GitHub, downloads the platform-specific binary (darwin/linux/windows, amd64/arm64), and deploys it. Use official plugin IDs from the registry or any GitHub repository URL that follows the [plugin deployment docs](https://apito.io/docs/plugin-deploy-docs).
 
 **Plugin Creation Workflow:**
 
@@ -714,7 +733,11 @@ apito plugin status hc-my-awesome-plugin
 **Plugin Development:**
 
 ```bash
-# Create plugin scaffold
+# Add plugin from registry or GitHub (quickest way to get a plugin)
+apito plugin add hc-auth-plugin
+apito plugin add https://github.com/owner/hc-my-plugin
+
+# Create plugin scaffold (for custom development)
 apito plugin create
 # > Enter plugin name: hc-file-processor
 # > Select language: Go
@@ -738,6 +761,11 @@ apito plugin deploy ./path/to/plugin
 # Deploy to specific account
 apito plugin deploy --account staging
 apito plugin deploy -a production
+
+# Force deploy (delete existing before deploy)
+apito plugin deploy -a udbhabon --force
+apito plugin deploy -a udbhabon -f
+apito plugin deploy -a udbhabon --replace
 
 # Update existing plugin (requires confirmation)
 apito plugin update hc-file-processor
