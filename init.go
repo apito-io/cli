@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,73 @@ var initCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		initializeSystem()
 	},
+}
+
+var initUpdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update system .env with new default keys",
+	Long:  `Merges missing default env keys into ~/.apito/bin/.env. Use after upgrading the CLI when new env vars are introduced. Prints what was added, or "Nothing to change." if already up to date.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runInitUpdate()
+	},
+}
+
+func init() {
+	initCmd.AddCommand(initUpdateCmd)
+}
+
+func runInitUpdate() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		print_error("Failed to get home directory: " + err.Error())
+		return
+	}
+
+	envPath, err := getEnvPath()
+	if err != nil {
+		print_error("Failed to resolve .env path: " + err.Error())
+		return
+	}
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		print_error("No system .env found at ~/.apito/bin/.env. Run 'apito init' first.")
+		return
+	}
+
+	existing, err := ReadEnv()
+	if err != nil {
+		print_error("Failed to read .env: " + err.Error())
+		return
+	}
+
+	runMode := "docker"
+	if cfg, cfgErr := loadCLIConfig(); cfgErr == nil && cfg.Mode != "" {
+		runMode = cfg.Mode
+	}
+
+	defaultConfig := getDefaultEnvConfig(runMode, homeDir)
+	var added []string
+	for k, v := range defaultConfig {
+		if _, ok := existing[k]; !ok {
+			existing[k] = v
+			added = append(added, k)
+		}
+	}
+
+	if len(added) == 0 {
+		print_status("Nothing to change.")
+		return
+	}
+
+	if err := WriteEnv(existing); err != nil {
+		print_error("Failed to write .env: " + err.Error())
+		return
+	}
+
+	sort.Strings(added)
+	print_success("Updated ~/.apito/bin/.env")
+	for _, k := range added {
+		print_status("  Added: " + k)
+	}
 }
 
 func initializeSystem() {
@@ -140,6 +208,62 @@ func ensureApitoDirectory() error {
 	return nil
 }
 
+// getDefaultEnvConfig returns the default env key/value map for ~/.apito/bin/.env.
+// runMode is "docker" or "manual"; homeDir is used for manual-mode paths.
+func getDefaultEnvConfig(runMode, homeDir string) map[string]string {
+	defaultDatabaseDir := "/app/db"
+	var (
+		cacheDatabasePath        string
+		kvDatabasePath           string
+		queueDatabasePath        string
+		systemDatabasePath       string
+		projectDatabasePath      string
+		defaultSaaSProjectDBPath string
+	)
+	if runMode == "docker" {
+		cacheDatabasePath = "apito_cache.db"
+		kvDatabasePath = "apito_kv.db"
+		queueDatabasePath = "apito_queue.db"
+		systemDatabasePath = "apito_system.db"
+		projectDatabasePath = "apito_project.db"
+		defaultSaaSProjectDBPath = "apito_saas_project.db"
+	} else {
+		dbDataDir := filepath.Join(homeDir, ".apito", "db")
+		cacheDatabasePath = filepath.Join(dbDataDir, "apito_cache.db")
+		kvDatabasePath = filepath.Join(dbDataDir, "apito_kv.db")
+		queueDatabasePath = filepath.Join(dbDataDir, "apito_queue.db")
+		systemDatabasePath = filepath.Join(dbDataDir, "apito_system.db")
+		projectDatabasePath = filepath.Join(dbDataDir, "apito_project.db")
+		defaultSaaSProjectDBPath = filepath.Join(dbDataDir, "apito_saas_project.db")
+	}
+	return map[string]string{
+		"ENVIRONMENT":                 "local",
+		"AUTH_SERVICE_PROVIDER":       "local",
+		"BRANKA_KEY":                  "",
+		"COOKIE_DOMAIN":               "localhost",
+		"CORS_ORIGIN":                 "http://localhost:4000",
+		"PLUGIN_PATH":                 "plugins",
+		"PRIVATE_KEY_PATH":            "keys/private.key",
+		"PUBLIC_KEY_PATH":             "keys/public.key",
+		"SERVE_PORT":                  "5050",
+		"TOKEN_TTL":                   "60",
+		"APITO_ADMIN_RESET_SECRET":    generateSecurePassword(),
+		"DEFAULT_DATABASE_DIR":        defaultDatabaseDir,
+		"CACHE_DB":                    "memory",
+		"CACHE_DB_HOST":               cacheDatabasePath,
+		"CACHE_TTL":                   "600",
+		"KV_ENGINE":                   "coreDB",
+		"KV_DATABASE":                 kvDatabasePath,
+		"QUEUE_ENGINE":                "coreDB",
+		"QUEUE_DATABASE":              queueDatabasePath,
+		"SYSTEM_DB_ENGINE":            "coreDB",
+		"SYSTEM_DB_NAME":             systemDatabasePath,
+		"PROJECT_DB_ENGINE":           "coreDB",
+		"PROJECT_DB_NAME":             projectDatabasePath,
+		"DEFAULT_SAAS_PROJECT_DB_NAME": defaultSaaSProjectDBPath,
+	}
+}
+
 func ensureDefaultEnvironmentConfig(runMode string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -161,38 +285,6 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 	}
 	configFile := filepath.Join(apitoBinDir, ".env")
 
-	defaultDatabaseDir := "/app/db"
-
-	var (
-		cacheDatabasePath        string
-		kvDatabasePath           string
-		queueDatabasePath        string
-		systemDatabasePath       string
-		projectDatabasePath      string
-		defaultSaaSProjectDBPath string
-	)
-
-	if runMode == "docker" {
-		// docker usages /app as working directory
-		// in docker ~/.apito/db is mouunted as /app/db
-		// so we use /app/db as the database path
-		cacheDatabasePath = "apito_cache.db"
-		kvDatabasePath = "apito_kv.db"
-		queueDatabasePath = "apito_queue.db"
-		systemDatabasePath = "apito_system.db"
-		projectDatabasePath = "apito_project.db"
-		defaultSaaSProjectDBPath = "apito_saas_project.db"
-	} else {
-		// in normal mode, we use the home directory
-		dbDataDir := filepath.Join(homeDir, ".apito", "db")
-		cacheDatabasePath = filepath.Join(dbDataDir, "apito_cache.db")
-		kvDatabasePath = filepath.Join(dbDataDir, "apito_kv.db")
-		queueDatabasePath = filepath.Join(dbDataDir, "apito_queue.db")
-		systemDatabasePath = filepath.Join(dbDataDir, "apito_system.db")
-		projectDatabasePath = filepath.Join(dbDataDir, "apito_project.db")
-		defaultSaaSProjectDBPath = filepath.Join(dbDataDir, "apito_saas_project.db")
-	}
-
 	// If .env exists as a directory (Docker creates it when bind-mount target is missing),
 	// remove it so we can create a proper file.
 	if info, err := os.Stat(configFile); err == nil && info.IsDir() {
@@ -206,39 +298,7 @@ func ensureDefaultEnvironmentConfig(runMode string) error {
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		print_status("Creating system configuration file...")
 
-		// Create default configuration
-		defaultConfig := map[string]string{
-			"ENVIRONMENT":           "local",
-			"AUTH_SERVICE_PROVIDER": "local",
-			"BRANKA_KEY":            "",
-			"COOKIE_DOMAIN":         "localhost",
-			"CORS_ORIGIN":           "http://localhost:4000",
-			"PLUGIN_PATH":           "plugins",
-			"PRIVATE_KEY_PATH":      "keys/private.key",
-			"PUBLIC_KEY_PATH":       "keys/public.key",
-			"SERVE_PORT":            "5050",
-			"TOKEN_TTL":             "60",
-
-			"DEFAULT_DATABASE_DIR": defaultDatabaseDir,
-
-			"CACHE_DB":      "memory",
-			"CACHE_DB_HOST": cacheDatabasePath,
-			"CACHE_TTL":     "600",
-
-			"KV_ENGINE":   "coreDB",
-			"KV_DATABASE": kvDatabasePath,
-
-			"QUEUE_ENGINE":   "coreDB",
-			"QUEUE_DATABASE": queueDatabasePath,
-
-			"SYSTEM_DB_ENGINE": "coreDB",
-			"SYSTEM_DB_NAME":   systemDatabasePath,
-
-			"PROJECT_DB_ENGINE": "coreDB",
-			"PROJECT_DB_NAME":   projectDatabasePath,
-
-			"DEFAULT_SAAS_PROJECT_DB_NAME": defaultSaaSProjectDBPath,
-		}
+		defaultConfig := getDefaultEnvConfig(runMode, homeDir)
 
 		if err := saveEnvConfig(apitoBinDir, defaultConfig); err != nil {
 			return fmt.Errorf("error creating system config: %w", err)

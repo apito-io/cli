@@ -1,10 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/manifoldco/promptui"
 )
@@ -42,10 +42,20 @@ func getDefaultConfig(engine string) DatabaseConfig {
 	return config
 }
 
-// generateSecurePassword generates a secure password for database
+const passwordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// generateSecurePassword returns a 12-character password from a-zA-Z0-9 using crypto/rand.
 func generateSecurePassword() string {
-	// Simple secure password generation - in production, use crypto/rand
-	return "Apito" + fmt.Sprintf("%d", time.Now().Unix()%10000)
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		// fallback if rand fails (should not happen)
+		return "Apito0aB1cD2eF3"
+	}
+	out := make([]byte, 12)
+	for i := range out {
+		out[i] = passwordChars[int(b[i])%len(passwordChars)]
+	}
+	return string(out)
 }
 
 // promptForCredentials prompts user to choose between default and custom credentials

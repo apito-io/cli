@@ -103,7 +103,7 @@ var stopCmd = &cobra.Command{
 }
 
 var restartCmd = &cobra.Command{
-	Use:   "restart [engine|console|all] [--db system|project]",
+	Use:   "restart [engine|console|all] [--db system|project] [--rebuild]",
 	Short: "Restart Apito services",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -138,55 +138,31 @@ var restartCmd = &cobra.Command{
 				print_error("Docker not available: " + err.Error())
 				return
 			}
+			rebuild, _ := cmd.Flags().GetBool("rebuild")
+			if rebuild {
+				_ = dockerComposeDown()
+				if err := dockerComposeUp(); err != nil {
+					print_error("Failed to start docker services: " + err.Error())
+					return
+				}
+				print_success("Docker services restarted (rebuild)")
+				return
+			}
 			containers, err := listApitoContainers()
 			if err != nil {
 				print_error("Failed to list containers: " + err.Error())
 				return
 			}
 			if len(containers) == 0 {
-				print_status("No Apito containers running")
+				startApito()
 				return
 			}
-			print_status("Running Apito containers:")
-			for _, c := range containers {
-				fmt.Println("  - " + c)
-			}
-			items := append([]string{"All (restart all Apito services)"}, containers...)
-			sel := promptui.Select{
-				Label: "Select what to restart",
-				Items: items,
-			}
-			idx, choice, err := sel.Run()
-			if err != nil {
+			_ = dockerComposeDown()
+			if err := dockerComposeUp(); err != nil {
+				print_error("Failed to start docker services: " + err.Error())
 				return
 			}
-			confirmPrompt := promptui.Prompt{
-				Label:     fmt.Sprintf("Restart %s?", choice),
-				IsConfirm: true,
-			}
-			if _, err := confirmPrompt.Run(); err != nil {
-				print_status("Cancelled")
-				return
-			}
-			if idx == 0 {
-				_ = dockerComposeDown()
-				if err := dockerComposeUp(); err != nil {
-					print_error("Failed to start docker services: " + err.Error())
-					return
-				}
-				print_success("Docker services restarted")
-			} else {
-				containerName := containers[idx-1]
-				if err := dockerStopContainers([]string{containerName}); err != nil {
-					print_error(err.Error())
-					return
-				}
-				if err := dockerStartContainers([]string{containerName}); err != nil {
-					print_error(err.Error())
-					return
-				}
-				print_success(containerName + " restarted")
-			}
+			print_success("Docker services restarted")
 			return
 		}
 		switch target {
@@ -225,4 +201,5 @@ var restartCmd = &cobra.Command{
 func init() {
 	stopCmd.Flags().String("db", "", "Stop only the specified database (system|project)")
 	restartCmd.Flags().String("db", "", "Restart only the specified database (system|project)")
+	restartCmd.Flags().Bool("rebuild", false, "Remove containers and start fresh (Docker mode)")
 }

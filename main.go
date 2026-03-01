@@ -34,6 +34,7 @@ func main() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(pluginCmd) // Add plugin management commands
+	rootCmd.AddCommand(adminCmd)
 	// pruned commands: list, login, change-pass
 
 	if err := rootCmd.Execute(); err != nil {

@@ -719,7 +719,14 @@ func writeComposeFile() (string, error) {
 	compose.Services["console"] = Service{
 		Image:         fmt.Sprintf("ghcr.io/apito-io/console:%s", consoleVersion),
 		ContainerName: "apito-console",
-		Environment:   []string{},
+		Environment:   []string{
+			"BACKEND_REST_API=http://localhost:5050",
+			"BACKEND_GRAPH_API=http://localhost:5050/system/graphql",
+			"BACKEND_GRAPH_SUBS_API=ws://localhost:5050/system/graphql/subscription",
+			"BACKEND_PUBLIC_GRAPH_API=http://localhost:5050/secured/graphql",
+			"VITE_AUTH_PROVIDER=apito",
+			"VITE_COOKIE_DOMAIN=.localhost",
+		},
 		Ports:         []string{"4000:8080"},
 		Volumes:       []string{},
 		Restart:       "unless-stopped",
