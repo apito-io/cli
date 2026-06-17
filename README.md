@@ -244,9 +244,9 @@ apito init
 apito init
 ```
 
-#### `init update` - Merge New Env Keys Into System .env
+#### `init update` - Merge New Env Keys and Update docker-compose
 
-Adds any **missing** default env keys to your existing `~/.apito/bin/.env` without overwriting existing values. Use this after upgrading the CLI when new env vars (e.g. `APITO_ADMIN_RESET_SECRET`) are introduced.
+Adds any **missing** default env keys to your existing `~/.apito/bin/.env` without overwriting existing values, and in **Docker mode** regenerates `~/.apito/docker-compose.yml` with the current template and component versions. Use this after upgrading the CLI when new env vars or compose changes are introduced.
 
 **Usage:**
 
@@ -256,10 +256,9 @@ apito init update
 
 **Behavior:**
 
-- Reads `~/.apito/bin/.env` and compares it to the current default key set.
-- Adds only keys that are missing, with their default values (e.g. a generated reset secret).
-- Prints each added key; if nothing was missing, prints **"Nothing to change."**
-- Does not modify or remove existing keys.
+- **Env:** Reads `~/.apito/bin/.env` and compares it to the current default key set. Adds only keys that are missing, with their default values (e.g. a generated reset secret). Does not modify or remove existing keys.
+- **Docker (when mode is docker):** Fetches latest component versions (best effort), then **replaces** `~/.apito/docker-compose.yml` with the new content (engine + console images and config).
+- If no env keys were added and docker-compose was not updated (or not in Docker mode), prints **"Nothing to change."**
 
 **When to use:**
 
@@ -270,11 +269,15 @@ apito init update
 
 ```bash
 apito init update
-# Output (if keys were added):
+# Output (env keys added + Docker mode):
 # [SUCCESS] Updated ~/.apito/bin/.env
 # [INFO]   Added: APITO_ADMIN_RESET_SECRET
+# [SUCCESS] Updated ~/.apito/docker-compose.yml
 
-# Output (if already up to date):
+# Output (Docker mode, env already up to date):
+# [SUCCESS] Updated ~/.apito/docker-compose.yml
+
+# Output (nothing to do):
 # [INFO] Nothing to change.
 ```
 

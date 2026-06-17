@@ -4,6 +4,7 @@ apito_cli
 node_modules
 *.cast
 cli
+apito
 __debug*
 db/*
 config.yml

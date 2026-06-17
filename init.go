@@ -73,20 +73,34 @@ func runInitUpdate() {
 		}
 	}
 
-	if len(added) == 0 {
+	if len(added) > 0 {
+		if err := WriteEnv(existing); err != nil {
+			print_error("Failed to write .env: " + err.Error())
+			return
+		}
+		sort.Strings(added)
+		print_success("Updated ~/.apito/bin/.env")
+		for _, k := range added {
+			print_status("  Added: " + k)
+		}
+	}
+
+	// In Docker mode, regenerate docker-compose.yml with current template/versions
+	var composeUpdated bool
+	if runMode == "docker" {
+		if err := ensureComponentVersions(); err != nil {
+			print_warning("Could not fetch latest versions: " + err.Error())
+		}
+		if _, err := writeComposeFile(); err != nil {
+			print_warning("Could not update docker-compose.yml: " + err.Error())
+		} else {
+			composeUpdated = true
+			print_success("Updated ~/.apito/docker-compose.yml")
+		}
+	}
+
+	if len(added) == 0 && !composeUpdated {
 		print_status("Nothing to change.")
-		return
-	}
-
-	if err := WriteEnv(existing); err != nil {
-		print_error("Failed to write .env: " + err.Error())
-		return
-	}
-
-	sort.Strings(added)
-	print_success("Updated ~/.apito/bin/.env")
-	for _, k := range added {
-		print_status("  Added: " + k)
 	}
 }
 
