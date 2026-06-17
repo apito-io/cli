@@ -187,11 +187,43 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 
 	selected := byOption[picked]
 	profile, err := baseClient.WithProject(selected.ID).CurrentProject()
-	if err != nil {
-		print_warning("Could not load extended project metadata; using listProjects fields.")
-		return selected, nil
+	return validateSelectedProjectAccess(side, selected, profile, err)
+}
+
+// validateSelectedProjectAccess ensures the access token can operate on the picked project.
+// listProjects returns every project the user belongs to; sync tokens only honor
+// X-Apito-Project-Id when that id is in the token's project_ids claim.
+func validateSelectedProjectAccess(side string, selected SyncProject, current *SyncProject, currentErr error) (SyncProject, error) {
+	if currentErr != nil {
+		return SyncProject{}, fmt.Errorf(
+			"cannot load %s project %q (%s) with this access token: %w\n\n"+
+				"Regenerate the token in Console → Access Token, include this project in project_ids, "+
+				"update the account key (apito config set account <name> key <token>), and retry",
+			side, selected.Name, selected.ID, currentErr,
+		)
 	}
-	return *profile, nil
+	if current == nil || strings.TrimSpace(current.ID) == "" {
+		return SyncProject{}, fmt.Errorf(
+			"cannot resolve %s project %q (%s): currentProject returned empty data\n\n"+
+				"Regenerate the access token with this project in project_ids and update the account key",
+			side, selected.Name, selected.ID,
+		)
+	}
+	if strings.TrimSpace(current.ID) != strings.TrimSpace(selected.ID) {
+		return SyncProject{}, fmt.Errorf(
+			"access token for %s account does not include project %q (%s)\n\n"+
+				"The token resolved currentProject to %q (%s) instead. "+
+				"listProjects lists every project you belong to, but sync only works for projects "+
+				"listed in the token's project_ids.\n\n"+
+				"Regenerate the token in Console → Access Token, add %s to project_ids, "+
+				"update the account key, and retry",
+			side,
+			selected.Name, selected.ID,
+			current.Name, current.ID,
+			selected.ID,
+		)
+	}
+	return *current, nil
 }
 
 func validateProjectProfiles(from, to SyncProject) error {
