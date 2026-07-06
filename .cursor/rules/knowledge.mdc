@@ -1,5 +1,7 @@
 ---
-alwaysApply: true
+description: Knowledge entry point for cli — read .knowledge/README.md before coding in apito/cli
+globs: apito/cli/**
+alwaysApply: false
 ---
 
 # Knowledge base — cli
