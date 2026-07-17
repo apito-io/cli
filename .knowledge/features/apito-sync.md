@@ -1,31 +1,57 @@
 ---
 type: feature
 title: Apito Sync
-description: Schema and content synchronization between configured accounts and projects
+description: Schema, functions, and content synchronization between configured accounts and projects
 resource: sync.go
-tags: [cli, sync, schema, graphql]
-timestamp: 2026-07-07T00:00:00Z
+tags: [cli, sync, schema, functions, graphql]
+timestamp: 2026-07-16T00:00:00Z
 ---
 
 # Apito Sync
 
 ## Purpose
 
-`apito sync` copies **schema** (models, fields, relations) or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. On pro engines, schema applies as **drafts** — publish from Console.
+`apito sync` copies **schema** (models, fields, relations), **functions** (Logic function draft source + metadata), or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. On pro engines, schema applies as **drafts** — publish from Console.
 
 ## Flows
 
 - **Setup**: `apito account create` → server URL + cloud sync key per account.
-- **Run**: `apito sync --from A --to B --type schema|content` (or interactive prompts).
+- **Run**: `apito sync --from A --to B --type schema|functions|content` (or interactive prompts; menu order: schema → functions → content).
 - **Schema path**: introspect → diff (`sync_diff.go`) → plan → apply (`sync_apply.go`, merge helpers).
+- **Functions path**: `projectFunctionsInfo` → diff by name (`sync_function_diff.go`) → multiselect → `upsertFunctionToProject` (draft) → optional `--deploy` (`deployFunctionToProject`). Orchestration in `sync_functions.go`.
 - **Content path**: model selection → paginated copy with relation awareness (`sync_content.go`).
 - **Dry run**: `--dry-run` shows plan; `--yes` skips confirmations.
+
+## Functions sync
+
+Reuses the shipped engine lifecycle GraphQL (no new ops). Transfers **draft source + metadata**; the destination engine mints its own callable secret and (with `--deploy`) creates a new revision in its own artifact store — revision binaries are never copied between engines.
+
+Three directions:
+
+- **Project → project** (default): both sides are remote accounts. Diff by function name (add / update / capability drift), multiselect, upsert, optional deploy. Prints the destination `active_revision_id`.
+- **Project → local** (`--to local --dir ./fns`): export each function to `{dir}/{name}/meta.json` + `source.ts`. The REST secret is stripped unless `--include-secrets`.
+- **Local → project** (`--from local --dir ./fns --to prod`): scan the dir, validate meta/source (folder name must equal `meta.json.name`), upsert (+ optional `--deploy`).
+
+Flags: `--dir` (local dir, required when a side is `local`), `--deploy` (publish a revision after upsert), `--include-secrets` (copy `rest_api_secret_url_key` instead of regenerating). `local` is a reserved account name only valid for `--type functions`; at least one side must be a remote account.
+
+Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/test time (MCP `tenant_id` / `X-Apito-Tenant-ID`), not at definition-sync time.
+
+### Local on-disk format
+
+```text
+{dir}/
+  {functionName}/
+    meta.json      # name, description, capabilities, trigger_type, language,
+                   # graphql_schema_type, runtime_config, request/response, env_vars
+    source.ts      # draft Deno/TS source
+```
 
 ## Main files
 
 - `sync.go`, `sync_graphql.go`, `sync_schema.go`, `sync_schema_merge.go`
 - `sync_diff.go`, `sync_apply.go`, `sync_content.go`, `sync_plan.go`
-- Tests: `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_select_test.go`
+- Functions: `sync_functions.go`, `sync_function_fs.go`, `sync_function_diff.go`
+- Tests: `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_select_test.go`, `sync_functions_test.go`
 
 ## Dependencies
 
@@ -47,7 +73,7 @@ timestamp: 2026-07-07T00:00:00Z
 
 ## Tests
 
-- `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`
+- `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_functions_test.go` (diff kinds + local fs round-trip)
 
 ## Related
 
