@@ -151,7 +151,7 @@ func runFunctionSyncEndpoints(from, to functionEndpoint, deploy, includeSecrets,
 }
 
 // runLocalFunctionSync handles a sync where one side is the special "filesystem" account.
-func runLocalFunctionSync(fromName, toName string, timeout int, deploy, includeSecrets, dryRun, autoYes bool) error {
+func runLocalFunctionSync(fromName, toName string, timeout int, deploy, includeSecrets, dryRun, autoYes bool, preselectedRemote *SyncProject) error {
 	if isFilesystemSyncSide(fromName) && isFilesystemSyncSide(toName) {
 		return fmt.Errorf("both sides are %q — at least one side must be a remote account", filesystemAccountName)
 	}
@@ -172,9 +172,15 @@ func runLocalFunctionSync(fromName, toName string, timeout int, deploy, includeS
 		return err
 	}
 	base := newSyncGraphQLClient(remoteCfg.ServerURL, remoteCfg.CloudSyncKey, timeout)
-	project, err := selectSyncProject(base, remoteSide)
-	if err != nil {
-		return err
+	var project SyncProject
+	if preselectedRemote != nil && strings.TrimSpace(preselectedRemote.ID) != "" {
+		project = *preselectedRemote
+		print_check(fmt.Sprintf("%s project: %s [%s] (%s)", remoteSide, project.Name, projectTypeLabel(project), project.ID))
+	} else {
+		project, err = selectSyncProject(base, remoteSide)
+		if err != nil {
+			return err
+		}
 	}
 	remoteClient := base.WithProject(project.ID)
 	remoteEndpoint := functionEndpoint{

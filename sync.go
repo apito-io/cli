@@ -104,47 +104,59 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no accounts configured — run: apito account create <name>")
 	}
 
-	fromName, err := resolveSyncAccount("FROM", syncFromAccount)
-	if err != nil {
-		return err
-	}
-	toName, err := resolveSyncAccount("TO", syncToAccount)
-	if err != nil {
-		return err
-	}
-
 	timeoutSec := cfg.Timeout
 	if timeoutSec <= 0 {
 		timeoutSec = 30
 	}
 
-	// Filesystem directory sync is only supported for functions and follows a
-	// dedicated path (only one remote side is a project).
-	if isFilesystemSyncSide(fromName) || isFilesystemSyncSide(toName) {
+	// Prompt order: FROM account → FROM project → TO account → TO project
+	// (pick each side's project immediately after its account).
+	fromName, err := resolveSyncAccount("FROM", syncFromAccount)
+	if err != nil {
+		return err
+	}
+
+	// Filesystem side has no project; resolve TO next, then remote project.
+	if isFilesystemSyncSide(fromName) {
+		toName, err := resolveSyncAccount("TO", syncToAccount)
+		if err != nil {
+			return err
+		}
 		kind := strings.ToLower(strings.TrimSpace(syncType))
 		if kind != "" && kind != "functions" {
 			return fmt.Errorf("account %q is only supported for --type functions", filesystemAccountName)
 		}
-		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes)
+		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, nil)
 	}
 
 	fromCfg, err := getAccountConfig(fromName)
 	if err != nil {
 		return err
 	}
-	toCfg, err := getAccountConfig(toName)
-	if err != nil {
-		return err
-	}
-
 	fromBase := newSyncGraphQLClient(fromCfg.ServerURL, fromCfg.CloudSyncKey, timeoutSec)
-	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.CloudSyncKey, timeoutSec)
-
 	fromProject, err := selectSyncProject(fromBase, "FROM")
 	if err != nil {
 		return err
 	}
 
+	toName, err := resolveSyncAccount("TO", syncToAccount)
+	if err != nil {
+		return err
+	}
+
+	if isFilesystemSyncSide(toName) {
+		kind := strings.ToLower(strings.TrimSpace(syncType))
+		if kind != "" && kind != "functions" {
+			return fmt.Errorf("account %q is only supported for --type functions", filesystemAccountName)
+		}
+		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, &fromProject)
+	}
+
+	toCfg, err := getAccountConfig(toName)
+	if err != nil {
+		return err
+	}
+	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.CloudSyncKey, timeoutSec)
 	toProject, err := selectSyncProject(toBase, "TO")
 	if err != nil {
 		return err
@@ -248,9 +260,34 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 		return SyncProject{}, fmt.Errorf("no projects available on %s account — ensure the access token includes project_ids (Console → Access Token) and restart the engine if you upgraded recently", side)
 	}
 
-	options := make([]string, len(projects))
-	byOption := make(map[string]SyncProject, len(projects))
-	for i, p := range projects {
+	// listProjects returns every membership; sync tokens only work for project_ids
+	// on the token. Probe currentProject so the picker only shows usable projects.
+	accessible, skipped := filterProjectsAccessibleByToken(baseClient, projects)
+	if len(accessible) == 0 {
+		return SyncProject{}, fmt.Errorf(
+			"no projects on %s account are in this access token's project_ids\n\n"+
+				"listProjects returned %d project(s), but none resolve via currentProject. "+
+				"Regenerate the token in Console → Access Token, include the projects you need, "+
+				"update the account key, and retry",
+			side, len(projects),
+		)
+	}
+	if skipped > 0 {
+		print_status(fmt.Sprintf(
+			"%s: showing %d project(s) in token scope (%d membership(s) hidden — not in token project_ids)",
+			side, len(accessible), skipped,
+		))
+	}
+
+	if len(accessible) == 1 {
+		p := accessible[0]
+		print_check(fmt.Sprintf("%s project: %s [%s] (%s)", side, p.Name, projectTypeLabel(p), p.ID))
+		return p, nil
+	}
+
+	options := make([]string, len(accessible))
+	byOption := make(map[string]SyncProject, len(accessible))
+	for i, p := range accessible {
 		label := fmt.Sprintf("%s [%s] (%s)", p.Name, projectTypeLabel(p), p.ID)
 		options[i] = label
 		byOption[label] = p
@@ -267,9 +304,26 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 		return SyncProject{}, fmt.Errorf("project selection cancelled")
 	}
 
-	selected := byOption[picked]
-	profile, err := baseClient.WithProject(selected.ID).CurrentProject()
-	return validateSelectedProjectAccess(side, selected, profile, err)
+	return byOption[picked], nil
+}
+
+// filterProjectsAccessibleByToken keeps projects where X-Apito-Project-Id is
+// honored by the access token (currentProject id matches the requested id).
+func filterProjectsAccessibleByToken(baseClient *SyncGraphQLClient, projects []SyncProject) (accessible []SyncProject, skipped int) {
+	for _, p := range projects {
+		profile, err := baseClient.WithProject(p.ID).CurrentProject()
+		if _, verr := validateSelectedProjectAccess("probe", p, profile, err); verr != nil {
+			skipped++
+			continue
+		}
+		// Prefer the enriched currentProject payload (saas flags, etc.).
+		if profile != nil && strings.TrimSpace(profile.ID) != "" {
+			accessible = append(accessible, *profile)
+		} else {
+			accessible = append(accessible, p)
+		}
+	}
+	return accessible, skipped
 }
 
 func selectSyncType() (string, error) {
