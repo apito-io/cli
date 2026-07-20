@@ -17,7 +17,7 @@ timestamp: 2026-07-16T00:00:00Z
 
 - **Setup**: `apito account create` → server URL + cloud sync key per account.
 - **Run**: interactive order is **FROM account → FROM project → TO account → TO project**, then sync type (`schema` → `functions` → `content`). Flags: `--from` / `--to` / `--type`.
-- Project picker only lists projects in the access token's `project_ids` (membership-only projects are hidden).
+- Project picker lists all `listProjects` memberships; after pick, sync validates the token can resolve that project via `currentProject`.
 - **Schema path**: introspect → diff (`sync_diff.go`) → plan → apply (`sync_apply.go`, merge helpers).
 - **Functions path**: `projectFunctionsInfo` (incl. `active_revision_hash`) → diff by name (`sync_function_diff.go`: add/update/deploy) → multiselect → upsert and/or `deployFunctionToProject`. Orchestration in `sync_functions.go`.
 - **Content path**: model selection → paginated copy with relation awareness (`sync_content.go`).
@@ -77,7 +77,7 @@ Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/t
 ## Common bugs
 
 - Missing account or token → configure via `apito config` / account create.
-- Picking a project not in token `project_ids` → no longer offered in the picker; regenerate token if the project is missing entirely.
+- Picking a project not in token `project_ids` → clear error after select (regenerate token with that project).
 - Destination pro engine: forgetting Console publish after sync → API still on old schema.
 - Content sync without schema parity → relation FK violations.
 

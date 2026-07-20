@@ -260,34 +260,16 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 		return SyncProject{}, fmt.Errorf("no projects available on %s account — ensure the access token includes project_ids (Console → Access Token) and restart the engine if you upgraded recently", side)
 	}
 
-	// listProjects returns every membership; sync tokens only work for project_ids
-	// on the token. Probe currentProject so the picker only shows usable projects.
-	accessible, skipped := filterProjectsAccessibleByToken(baseClient, projects)
-	if len(accessible) == 0 {
-		return SyncProject{}, fmt.Errorf(
-			"no projects on %s account are in this access token's project_ids\n\n"+
-				"listProjects returned %d project(s), but none resolve via currentProject. "+
-				"Regenerate the token in Console → Access Token, include the projects you need, "+
-				"update the account key, and retry",
-			side, len(projects),
-		)
-	}
-	if skipped > 0 {
-		print_status(fmt.Sprintf(
-			"%s: showing %d project(s) in token scope (%d membership(s) hidden — not in token project_ids)",
-			side, len(accessible), skipped,
-		))
-	}
-
-	if len(accessible) == 1 {
-		p := accessible[0]
+	if len(projects) == 1 {
+		p := projects[0]
 		print_check(fmt.Sprintf("%s project: %s [%s] (%s)", side, p.Name, projectTypeLabel(p), p.ID))
-		return p, nil
+		profile, err := baseClient.WithProject(p.ID).CurrentProject()
+		return validateSelectedProjectAccess(side, p, profile, err)
 	}
 
-	options := make([]string, len(accessible))
-	byOption := make(map[string]SyncProject, len(accessible))
-	for i, p := range accessible {
+	options := make([]string, len(projects))
+	byOption := make(map[string]SyncProject, len(projects))
+	for i, p := range projects {
 		label := fmt.Sprintf("%s [%s] (%s)", p.Name, projectTypeLabel(p), p.ID)
 		options[i] = label
 		byOption[label] = p
@@ -304,26 +286,9 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 		return SyncProject{}, fmt.Errorf("project selection cancelled")
 	}
 
-	return byOption[picked], nil
-}
-
-// filterProjectsAccessibleByToken keeps projects where X-Apito-Project-Id is
-// honored by the access token (currentProject id matches the requested id).
-func filterProjectsAccessibleByToken(baseClient *SyncGraphQLClient, projects []SyncProject) (accessible []SyncProject, skipped int) {
-	for _, p := range projects {
-		profile, err := baseClient.WithProject(p.ID).CurrentProject()
-		if _, verr := validateSelectedProjectAccess("probe", p, profile, err); verr != nil {
-			skipped++
-			continue
-		}
-		// Prefer the enriched currentProject payload (saas flags, etc.).
-		if profile != nil && strings.TrimSpace(profile.ID) != "" {
-			accessible = append(accessible, *profile)
-		} else {
-			accessible = append(accessible, p)
-		}
-	}
-	return accessible, skipped
+	selected := byOption[picked]
+	profile, err := baseClient.WithProject(selected.ID).CurrentProject()
+	return validateSelectedProjectAccess(side, selected, profile, err)
 }
 
 func selectSyncType() (string, error) {
