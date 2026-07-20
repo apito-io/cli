@@ -51,6 +51,11 @@ func print_step(message string) {
 	fmt.Println(Magenta + "[STEP]" + Reset + " " + message)
 }
 
+// print_check prints a green check confirmation (same visual as promptui Select).
+func print_check(message string) {
+	fmt.Println(Green + "✔" + Reset + " " + message)
+}
+
 func ArrayContains(arr []string, str string) bool {
 	for _, k := range arr {
 		if k == str {

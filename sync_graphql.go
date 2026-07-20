@@ -35,23 +35,23 @@ type SyncProject struct {
 }
 
 type SyncFieldValidation struct {
-	Required              *bool    `json:"required"`
-	Unique                *bool    `json:"unique"`
-	Hide                  *bool    `json:"hide"`
-	FixedListElements     []any    `json:"fixed_list_elements"`
-	FixedListElementType  string   `json:"fixed_list_element_type"`
+	Required             *bool  `json:"required"`
+	Unique               *bool  `json:"unique"`
+	Hide                 *bool  `json:"hide"`
+	FixedListElements    []any  `json:"fixed_list_elements"`
+	FixedListElementType string `json:"fixed_list_element_type"`
 }
 
 type SyncField struct {
-	Identifier   string              `json:"identifier"`
-	Label        string              `json:"label"`
-	FieldType    string              `json:"field_type"`
-	FieldSubType string              `json:"field_sub_type"`
-	InputType    string              `json:"input_type"`
-	Description  string              `json:"description"`
-	Serial       int                 `json:"serial"`
-	ParentField  string              `json:"parent_field"`
-	SubFieldInfo []SyncField         `json:"sub_field_info"`
+	Identifier   string               `json:"identifier"`
+	Label        string               `json:"label"`
+	FieldType    string               `json:"field_type"`
+	FieldSubType string               `json:"field_sub_type"`
+	InputType    string               `json:"input_type"`
+	Description  string               `json:"description"`
+	Serial       int                  `json:"serial"`
+	ParentField  string               `json:"parent_field"`
+	SubFieldInfo []SyncField          `json:"sub_field_info"`
 	Validation   *SyncFieldValidation `json:"validation"`
 }
 
@@ -63,10 +63,10 @@ type SyncConnection struct {
 }
 
 type SyncModel struct {
-	Name         string           `json:"name"`
-	SinglePage   bool             `json:"single_page"`
-	Fields       []SyncField      `json:"fields"`
-	Connections  []SyncConnection `json:"connections"`
+	Name        string           `json:"name"`
+	SinglePage  bool             `json:"single_page"`
+	Fields      []SyncField      `json:"fields"`
+	Connections []SyncConnection `json:"connections"`
 }
 
 type SyncDocument struct {
@@ -85,6 +85,58 @@ type SyncTenant struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Domain string `json:"domain"`
+}
+
+// SyncFunctionRuntimeConfig mirrors ApitoFunctionRuntimeConfig (handler/memory/runtime/time_out).
+type SyncFunctionRuntimeConfig struct {
+	Handler string `json:"handler,omitempty"`
+	Memory  int    `json:"memory,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+	TimeOut int    `json:"time_out,omitempty"`
+}
+
+// SyncFunctionModelRef is the request/response model reference on a function.
+type SyncFunctionModelRef struct {
+	Model           string `json:"model,omitempty"`
+	IsArray         bool   `json:"is_array,omitempty"`
+	OptionalPayload bool   `json:"optional_payload,omitempty"`
+}
+
+type SyncFunctionEnvVar struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// SyncFunction is the transferable definition of a Logic function (draft source + metadata).
+type SyncFunction struct {
+	Name                string                     `json:"name"`
+	Description         string                     `json:"description,omitempty"`
+	Source              string                     `json:"source,omitempty"`
+	TriggerType         string                     `json:"trigger_type,omitempty"`
+	Language            string                     `json:"language,omitempty"`
+	GraphQLSchemaType   string                     `json:"graphql_schema_type,omitempty"`
+	Capabilities        []string                   `json:"capabilities,omitempty"`
+	RuntimeConfig       *SyncFunctionRuntimeConfig `json:"runtime_config,omitempty"`
+	Request             *SyncFunctionModelRef      `json:"request,omitempty"`
+	Response            *SyncFunctionModelRef      `json:"response,omitempty"`
+	EnvVars             []SyncFunctionEnvVar       `json:"env_vars,omitempty"`
+	FunctionConnected   bool                       `json:"function_connected,omitempty"`
+	FunctionProviderID  string                     `json:"function_provider_id,omitempty"`
+	ActiveRevisionID    string                     `json:"active_revision_id,omitempty"`
+	ActiveRevisionHash  string                     `json:"active_revision_hash,omitempty"`
+	RestAPISecretURLKey string                     `json:"rest_api_secret_url_key,omitempty"`
+	CreatedAt           string                     `json:"created_at,omitempty"`
+	UpdatedAt           string                     `json:"updated_at,omitempty"`
+}
+
+// SyncFunctionRevision is a single immutable revision entry.
+type SyncFunctionRevision struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Revision     int    `json:"revision"`
+	ArtifactKey  string `json:"artifact_key"`
+	ArtifactHash string `json:"artifact_hash"`
+	CreatedAt    string `json:"created_at"`
 }
 
 type graphqlRequest struct {
@@ -336,8 +388,8 @@ func (c *SyncGraphQLClient) AddModel(name string, singleRecord bool) error {
 		AddModelToProject []SyncModel `json:"addModelToProject"`
 	}
 	return c.execute(mutation, map[string]interface{}{
-		"name":           name,
-		"single_record":  singleRecord,
+		"name":          name,
+		"single_record": singleRecord,
 	}, &out)
 }
 
@@ -374,11 +426,11 @@ func (c *SyncGraphQLClient) UpsertField(modelName string, field SyncField, isUpd
 		}
 	`
 	vars := map[string]interface{}{
-		"model_name":   modelName,
-		"field_label":  field.Label,
-		"field_type":   field.FieldType,
-		"input_type":   field.InputType,
-		"is_update":    isUpdate,
+		"model_name":  modelName,
+		"field_label": field.Label,
+		"field_type":  field.FieldType,
+		"input_type":  field.InputType,
+		"is_update":   isUpdate,
 	}
 	if field.FieldSubType != "" {
 		vars["field_sub_type"] = field.FieldSubType
@@ -580,6 +632,194 @@ func (c *SyncGraphQLClient) SchemaVersioningStatus() (*SchemaVersioningStatus, e
 		return nil, err
 	}
 	return out.SchemaVersioningStatus, nil
+}
+
+// ProjectFunctionsInfo lists project Logic functions with full transferable fields.
+func (c *SyncGraphQLClient) ProjectFunctionsInfo() ([]SyncFunction, error) {
+	const query = `
+		query ProjectFunctionsInfo {
+			projectFunctionsInfo {
+				name
+				description
+				graphql_schema_type
+				created_at
+				updated_at
+				trigger_type
+				language
+				source
+				active_revision_id
+				active_revision_hash
+				capabilities
+				function_connected
+				function_provider_id
+				request { model optional_payload is_array }
+				response { model optional_payload is_array }
+				runtime_config { handler memory runtime time_out }
+				env_vars { key value }
+				rest_api_secret_url_key
+			}
+		}
+	`
+	var out struct {
+		ProjectFunctionsInfo []SyncFunction `json:"projectFunctionsInfo"`
+	}
+	if err := c.execute(query, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.ProjectFunctionsInfo, nil
+}
+
+// UpsertFunction creates or updates a function's draft source + metadata on the destination.
+func (c *SyncGraphQLClient) UpsertFunction(fn SyncFunction, isUpdate bool) (*SyncFunction, error) {
+	const mutation = `
+		mutation UpsertFunctionToProject(
+			$name: String!
+			$description: String
+			$source: String
+			$trigger_type: String
+			$language: String
+			$graphql_schema_type: String
+			$capabilities: [String]
+			$runtime_config: Function_Provider_Config_Payload
+			$env_vars: [Function_Provider_Env_Vars_Payload]
+			$request: String
+			$request_payload_is_optional: Boolean
+			$response: String
+			$response_is_array: Boolean
+			$function_connected: Boolean
+			$function_provider_id: String
+			$update: Boolean
+		) {
+			upsertFunctionToProject(
+				name: $name
+				description: $description
+				source: $source
+				trigger_type: $trigger_type
+				language: $language
+				graphql_schema_type: $graphql_schema_type
+				capabilities: $capabilities
+				runtime_config: $runtime_config
+				env_vars: $env_vars
+				request: $request
+				request_payload_is_optional: $request_payload_is_optional
+				response: $response
+				response_is_array: $response_is_array
+				function_connected: $function_connected
+				function_provider_id: $function_provider_id
+				update: $update
+			) {
+				name
+				source
+				active_revision_id
+				capabilities
+				rest_api_secret_url_key
+			}
+		}
+	`
+	vars := map[string]interface{}{
+		"name":   fn.Name,
+		"update": isUpdate,
+	}
+	if fn.Description != "" {
+		vars["description"] = fn.Description
+	}
+	if fn.Source != "" {
+		vars["source"] = fn.Source
+	}
+	if fn.TriggerType != "" {
+		vars["trigger_type"] = fn.TriggerType
+	}
+	if fn.Language != "" {
+		vars["language"] = fn.Language
+	}
+	if fn.GraphQLSchemaType != "" {
+		vars["graphql_schema_type"] = fn.GraphQLSchemaType
+	}
+	if len(fn.Capabilities) > 0 {
+		vars["capabilities"] = fn.Capabilities
+	}
+	if fn.RuntimeConfig != nil {
+		vars["runtime_config"] = fn.RuntimeConfig
+	}
+	if len(fn.EnvVars) > 0 {
+		vars["env_vars"] = fn.EnvVars
+	}
+	if fn.Request != nil && fn.Request.Model != "" {
+		vars["request"] = fn.Request.Model
+		vars["request_payload_is_optional"] = fn.Request.OptionalPayload
+	}
+	if fn.Response != nil && fn.Response.Model != "" {
+		vars["response"] = fn.Response.Model
+		vars["response_is_array"] = fn.Response.IsArray
+	}
+	if fn.FunctionConnected {
+		vars["function_connected"] = fn.FunctionConnected
+	}
+	if fn.FunctionProviderID != "" {
+		vars["function_provider_id"] = fn.FunctionProviderID
+	}
+	var out struct {
+		UpsertFunctionToProject SyncFunction `json:"upsertFunctionToProject"`
+	}
+	if err := c.execute(mutation, vars, &out); err != nil {
+		return nil, err
+	}
+	return &out.UpsertFunctionToProject, nil
+}
+
+// DeployFunction publishes the current draft (or given source) as a new active revision.
+func (c *SyncGraphQLClient) DeployFunction(name, source string) (*SyncFunction, error) {
+	const mutation = `
+		mutation DeployFunctionToProject($name: String!, $source: String) {
+			deployFunctionToProject(name: $name, source: $source) {
+				function {
+					name
+					active_revision_id
+					rest_api_secret_url_key
+				}
+			}
+		}
+	`
+	vars := map[string]interface{}{"name": name}
+	if source != "" {
+		vars["source"] = source
+	}
+	var out struct {
+		DeployFunctionToProject struct {
+			Function SyncFunction `json:"function"`
+		} `json:"deployFunctionToProject"`
+	}
+	if err := c.execute(mutation, vars, &out); err != nil {
+		return nil, err
+	}
+	return &out.DeployFunctionToProject.Function, nil
+}
+
+// ListFunctionRevisions returns revision history for a function.
+func (c *SyncGraphQLClient) ListFunctionRevisions(name string, limit int) ([]SyncFunctionRevision, error) {
+	const query = `
+		query ListFunctionRevisions($name: String!, $limit: Int) {
+			listFunctionRevisions(name: $name, limit: $limit) {
+				id
+				name
+				revision
+				artifact_key
+				artifact_hash
+				created_at
+			}
+		}
+	`
+	vars := map[string]interface{}{"name": name}
+	if limit > 0 {
+		vars["limit"] = limit
+	}
+	var out struct {
+		ListFunctionRevisions []SyncFunctionRevision `json:"listFunctionRevisions"`
+	}
+	if err := c.execute(query, vars, &out); err != nil {
+		return nil, err
+	}
+	return out.ListFunctionRevisions, nil
 }
 
 func (c *SyncGraphQLClient) SchemaPreviewModels(source string) ([]SyncModel, error) {

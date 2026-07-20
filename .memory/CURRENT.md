@@ -1,10 +1,16 @@
 # cli — Current
 
+**Branch:** `main`
+**Release:** tagging **v0.4.2** (functions sync)
+
 ## Working on
-- _TODO (from in-progress plans)_
+- **Functions sync (2026-07-18→20):** `apito sync --type functions` ready for
+  release — project↔project, local dir, `--deploy`, `--include-secrets`,
+  active-revision deploy parity. Releasing as **v0.4.2**.
 
 ## Next
-- _TODO (from pending plans)_
+- Confirm GitHub Actions GoReleaser succeeded for `v0.4.2`
+- Optional: smoke `apito self-upgrade` / Homebrew tap update
 
 ## Last Updated
-2026-07-06
+2026-07-20

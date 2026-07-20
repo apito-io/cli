@@ -18,21 +18,29 @@ timestamp: 2026-07-16T00:00:00Z
 - **Setup**: `apito account create` → server URL + cloud sync key per account.
 - **Run**: `apito sync --from A --to B --type schema|functions|content` (or interactive prompts; menu order: schema → functions → content).
 - **Schema path**: introspect → diff (`sync_diff.go`) → plan → apply (`sync_apply.go`, merge helpers).
-- **Functions path**: `projectFunctionsInfo` → diff by name (`sync_function_diff.go`) → multiselect → `upsertFunctionToProject` (draft) → optional `--deploy` (`deployFunctionToProject`). Orchestration in `sync_functions.go`.
+- **Functions path**: `projectFunctionsInfo` (incl. `active_revision_hash`) → diff by name (`sync_function_diff.go`: add/update/deploy) → multiselect → upsert and/or `deployFunctionToProject`. Orchestration in `sync_functions.go`.
 - **Content path**: model selection → paginated copy with relation awareness (`sync_content.go`).
 - **Dry run**: `--dry-run` shows plan; `--yes` skips confirmations.
 
 ## Functions sync
 
-Reuses the shipped engine lifecycle GraphQL (no new ops). Transfers **draft source + metadata**; the destination engine mints its own callable secret and (with `--deploy`) creates a new revision in its own artifact store — revision binaries are never copied between engines.
+Reuses the shipped engine lifecycle GraphQL (no new ops). Transfers **draft source + metadata**; the destination engine mints its own callable secret and creates a new revision in its own artifact store when publishing — revision binaries are never copied between engines.
+
+**Diff kinds:** add / update (draft drift) / **deploy** (draft equal but destination live `active_revision_hash` missing or ≠ `sha256(source)` while source has an `active_revision_id`).
+
+**Apply:**
+
+- `deploy` → `deployFunctionToProject` only (no upsert).
+- `add` / `update` → upsert draft; then deploy if `--deploy` **or** the source function is published (`active_revision_id` set).
+- `projectFunctionsInfo` returns `active_revision_hash` (enriched from the active revision row) so the CLI does not N+1 `listFunctionRevisions`.
 
 Three directions:
 
-- **Project → project** (default): both sides are remote accounts. Diff by function name (add / update / capability drift), multiselect, upsert, optional deploy. Prints the destination `active_revision_id`.
-- **Project → local** (`--to local --dir ./fns`): export each function to `{dir}/{name}/meta.json` + `source.ts`. The REST secret is stripped unless `--include-secrets`.
-- **Local → project** (`--from local --dir ./fns --to prod`): scan the dir, validate meta/source (folder name must equal `meta.json.name`), upsert (+ optional `--deploy`).
+- **Project → project** (default): both sides are remote accounts. Diff by function name (add / update / deploy / capability drift), multiselect, upsert and/or deploy. Prints the destination `active_revision_id`. **No disk / `--dir` involved** — GraphQL reads draft `source` from the system DB and upserts it to the destination system DB.
+- **Project → filesystem** (`--to filesystem`): export each function to `{dir}/{name}/meta.json` + `source.ts`. Default dir: `~/.apito/temp/functions` (override with `--dir`). The REST secret is stripped unless `--include-secrets`. `active_revision_hash` may be kept as informational; `active_revision_id` is not.
+- **Filesystem → project** (`--from filesystem --to prod`): scan the dir, validate meta/source (folder name must equal `meta.json.name`), upsert (+ `--deploy` or published-source auto-deploy when meta still carries a revision id — normally stripped on export).
 
-Flags: `--dir` (local dir, required when a side is `local`), `--deploy` (publish a revision after upsert), `--include-secrets` (copy `rest_api_secret_url_key` instead of regenerating). `local` is a reserved account name only valid for `--type functions`; at least one side must be a remote account.
+Flags: `--dir` (optional; defaults to `~/.apito/temp/functions` for filesystem sides), `--deploy` (also publish after upsert for draft-only sources), `--include-secrets` (copy `rest_api_secret_url_key` instead of regenerating). Reserved account name is **`filesystem`** (not `local` — a configured account named `local` is a normal remote localhost engine). At least one side must be a remote account.
 
 Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/test time (MCP `tenant_id` / `X-Apito-Tenant-ID`), not at definition-sync time.
 

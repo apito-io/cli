@@ -2,20 +2,76 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
-	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
 var (
-	syncFromAccount string
-	syncToAccount   string
-	syncType        string
-	syncDryRun      bool
-	syncYes         bool
+	syncFromAccount   string
+	syncToAccount     string
+	syncType          string
+	syncDryRun        bool
+	syncYes           bool
+	syncDir           string
+	syncDeploy        bool
+	syncIncludeSecret bool
 )
+
+// filesystemAccountName is the reserved account name that maps to a local
+// directory (via --dir, defaulting to ~/.apito/temp/functions) instead of a
+// remote GraphQL endpoint. Only valid for --type functions.
+//
+// Note: a configured account literally named "local" (common for localhost
+// engines) is a normal remote account — it must NOT collide with this reserved
+// name. Prefer "filesystem" for on-disk import/export.
+const filesystemAccountName = "filesystem"
+
+// legacyFilesystemAccountName was the old reserved token; kept only when no
+// configured account uses that name (see isFilesystemSyncSide).
+const legacyFilesystemAccountName = "local"
+
+func isFilesystemSyncSide(name string) bool {
+	n := strings.TrimSpace(name)
+	if strings.EqualFold(n, filesystemAccountName) {
+		return true
+	}
+	// "local" is filesystem only when it is NOT a configured CLI account.
+	if strings.EqualFold(n, legacyFilesystemAccountName) {
+		if _, err := getAccountConfig(n); err == nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// defaultFunctionsSyncDir returns ~/.apito/temp/functions.
+func defaultFunctionsSyncDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".apito", "temp", "functions"), nil
+}
+
+func resolveFunctionsSyncDir() (string, error) {
+	if d := strings.TrimSpace(syncDir); d != "" {
+		return d, nil
+	}
+	dir, err := defaultFunctionsSyncDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create default functions dir %s: %w", dir, err)
+	}
+	print_status(fmt.Sprintf("Using functions directory: %s (override with --dir)", dir))
+	return dir, nil
+}
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
@@ -28,11 +84,14 @@ Schema changes are staged as drafts on pro engines — publish from Console when
 }
 
 func init() {
-	syncCmd.Flags().StringVar(&syncFromAccount, "from", "", "Source account name")
-	syncCmd.Flags().StringVar(&syncToAccount, "to", "", "Destination account name")
-	syncCmd.Flags().StringVar(&syncType, "type", "", "Sync type: schema or content")
+	syncCmd.Flags().StringVar(&syncFromAccount, "from", "", "Source account name (or \"filesystem\" for on-disk functions)")
+	syncCmd.Flags().StringVar(&syncToAccount, "to", "", "Destination account name (or \"filesystem\" for on-disk functions)")
+	syncCmd.Flags().StringVar(&syncType, "type", "", "Sync type: schema, functions or content")
 	syncCmd.Flags().BoolVar(&syncDryRun, "dry-run", false, "Show planned changes without writing")
 	syncCmd.Flags().BoolVar(&syncYes, "yes", false, "Skip confirmation prompts")
+	syncCmd.Flags().StringVar(&syncDir, "dir", "", "Local functions directory (default: ~/.apito/temp/functions when using filesystem)")
+	syncCmd.Flags().BoolVar(&syncDeploy, "deploy", false, "After upserting functions, deploy a new active revision on the destination")
+	syncCmd.Flags().BoolVar(&syncIncludeSecret, "include-secrets", false, "Copy rest_api_secret_url_key instead of regenerating on the destination")
 	rootCmd.AddCommand(syncCmd)
 }
 
@@ -45,13 +104,28 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no accounts configured — run: apito account create <name>")
 	}
 
-	fromName, err := resolveSyncAccount("FROM (source)", syncFromAccount)
+	fromName, err := resolveSyncAccount("FROM", syncFromAccount)
 	if err != nil {
 		return err
 	}
-	toName, err := resolveSyncAccount("TO (destination)", syncToAccount)
+	toName, err := resolveSyncAccount("TO", syncToAccount)
 	if err != nil {
 		return err
+	}
+
+	timeoutSec := cfg.Timeout
+	if timeoutSec <= 0 {
+		timeoutSec = 30
+	}
+
+	// Filesystem directory sync is only supported for functions and follows a
+	// dedicated path (only one remote side is a project).
+	if isFilesystemSyncSide(fromName) || isFilesystemSyncSide(toName) {
+		kind := strings.ToLower(strings.TrimSpace(syncType))
+		if kind != "" && kind != "functions" {
+			return fmt.Errorf("account %q is only supported for --type functions", filesystemAccountName)
+		}
+		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes)
 	}
 
 	fromCfg, err := getAccountConfig(fromName)
@@ -63,21 +137,15 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	timeout := cfg.Timeout
-	if timeout <= 0 {
-		timeout = 30
-	}
-	fromBase := newSyncGraphQLClient(fromCfg.ServerURL, fromCfg.CloudSyncKey, timeout)
-	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.CloudSyncKey, timeout)
+	fromBase := newSyncGraphQLClient(fromCfg.ServerURL, fromCfg.CloudSyncKey, timeoutSec)
+	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.CloudSyncKey, timeoutSec)
 
-	print_step(fmt.Sprintf("Source account: %s (%s)", fromName, fromCfg.ServerURL))
-	print_step(fmt.Sprintf("Destination account: %s (%s)", toName, toCfg.ServerURL))
-
-	fromProject, err := selectSyncProject(fromBase, "source")
+	fromProject, err := selectSyncProject(fromBase, "FROM")
 	if err != nil {
 		return err
 	}
-	toProject, err := selectSyncProject(toBase, "destination")
+
+	toProject, err := selectSyncProject(toBase, "TO")
 	if err != nil {
 		return err
 	}
@@ -111,14 +179,23 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 	switch kind {
 	case "schema":
 		return runSchemaSync(fromClient, toClient, endpoints, syncDryRun, syncYes)
+	case "functions":
+		return runFunctionSync(fromClient, toClient, endpoints, syncDeploy, syncIncludeSecret, syncDryRun, syncYes)
 	case "content":
 		return runContentSync(fromClient, toClient, fromProject, toProject, syncDryRun, syncYes)
 	default:
-		return fmt.Errorf("invalid --type %q (use schema or content)", syncType)
+		return fmt.Errorf("invalid --type %q (use schema, functions or content)", syncType)
 	}
 }
 
 func resolveSyncAccount(label, flagValue string) (string, error) {
+	if isFilesystemSyncSide(flagValue) {
+		if strings.EqualFold(strings.TrimSpace(flagValue), filesystemAccountName) {
+			return filesystemAccountName, nil
+		}
+		// Legacy "local" with no configured account → filesystem.
+		return filesystemAccountName, nil
+	}
 	if flagValue != "" {
 		if _, err := getAccountConfig(flagValue); err != nil {
 			return "", err
@@ -138,13 +215,13 @@ func selectAccountForSync(label string) (string, error) {
 		return "", fmt.Errorf("no accounts configured")
 	}
 	if len(names) == 1 {
-		print_status(fmt.Sprintf("Using only account for %s: %s", label, names[0]))
+		print_check(fmt.Sprintf("%s account: %s", label, names[0]))
 		return names[0], nil
 	}
 
 	print_step(fmt.Sprintf("Select %s account", label))
 	selector := promptui.Select{
-		Label: fmt.Sprintf("Account (%s)", label),
+		Label: fmt.Sprintf("%s account", label),
 		Items: names,
 		Size:  len(names),
 	}
@@ -153,6 +230,13 @@ func selectAccountForSync(label string) (string, error) {
 		return "", fmt.Errorf("account selection cancelled")
 	}
 	return selected, nil
+}
+
+func projectTypeLabel(p SyncProject) string {
+	if p.ProjectType == "" {
+		return "general"
+	}
+	return p.ProjectType
 }
 
 func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject, error) {
@@ -167,27 +251,40 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 	options := make([]string, len(projects))
 	byOption := make(map[string]SyncProject, len(projects))
 	for i, p := range projects {
-		pt := p.ProjectType
-		if pt == "" {
-			pt = "general"
-		}
-		label := fmt.Sprintf("%s [%s] (%s)", p.Name, pt, p.ID)
+		label := fmt.Sprintf("%s [%s] (%s)", p.Name, projectTypeLabel(p), p.ID)
 		options[i] = label
 		byOption[label] = p
 	}
 
-	var picked string
-	prompt := &survey.Select{
-		Message: fmt.Sprintf("Select %s project", side),
-		Options: options,
+	print_step(fmt.Sprintf("Select %s project", side))
+	selector := promptui.Select{
+		Label: fmt.Sprintf("%s project", side),
+		Items: options,
+		Size:  min(len(options), 12),
 	}
-	if err := survey.AskOne(prompt, &picked); err != nil {
+	_, picked, err := selector.Run()
+	if err != nil {
 		return SyncProject{}, fmt.Errorf("project selection cancelled")
 	}
 
 	selected := byOption[picked]
 	profile, err := baseClient.WithProject(selected.ID).CurrentProject()
 	return validateSelectedProjectAccess(side, selected, profile, err)
+}
+
+func selectSyncType() (string, error) {
+	options := []string{"schema", "functions", "content"}
+	print_step("What do you want to sync?")
+	selector := promptui.Select{
+		Label: "Sync type",
+		Items: options,
+		Size:  len(options),
+	}
+	_, picked, err := selector.Run()
+	if err != nil {
+		return "", err
+	}
+	return picked, nil
 }
 
 // validateSelectedProjectAccess ensures the access token can operate on the picked project.
@@ -233,16 +330,4 @@ func validateProjectProfiles(from, to SyncProject) error {
 		return fmt.Errorf("project type mismatch: source is %q but destination is %q (must match: general, saas-shared, saas-per-tenant)", fromKey, toKey)
 	}
 	return nil
-}
-
-func selectSyncType() (string, error) {
-	options := []string{"schema", "content"}
-	var picked string
-	if err := survey.AskOne(&survey.Select{
-		Message: "What do you want to sync?",
-		Options: options,
-	}, &picked); err != nil {
-		return "", err
-	}
-	return picked, nil
 }
