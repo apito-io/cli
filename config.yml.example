@@ -6,7 +6,7 @@ console_version: v0.1.0
 accounts:
     development:
         server_url: http://localhost:5050
-        cloud_sync_key: cl-AQAAAABo3Wov1s_uv6RndWxE_G....... (your cloud sync key)
+        cloud_sync_key: apt_AQAAAABo3Wov1s_uv6RndWxE_G....... (your access token, generated in Console → Access Token)
     production:
         server_url: https://api.example.com
-        cloud_sync_key: cl-AQAAAABo3Wov1s_uv6RndWxE_G....... (your cloud sync key)
+        cloud_sync_key: apt_AQAAAABo3Wov1s_uv6RndWxE_G....... (your access token, generated in Console → Access Token)

@@ -277,7 +277,10 @@ func getAccountConfig(accountName string) (AccountConfig, error) {
     }
 
     if account.CloudSyncKey == "" {
-        return AccountConfig{}, fmt.Errorf("account '%s' has no cloud sync key configured", accountName)
+        return AccountConfig{}, fmt.Errorf("account '%s' has no access token configured", accountName)
+    }
+    if IsRetiredTokenPrefix(account.CloudSyncKey) {
+        return AccountConfig{}, fmt.Errorf("account '%s': TOKEN_FORMAT_RETIRED: use apt_ access tokens", accountName)
     }
 
     return account, nil
@@ -442,7 +445,8 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
     }
 
     req.Header.Set("Content-Type", writer.FormDataContentType())
-    req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+    req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+    req.Header.Set("X-Use-Cookies", "false")
 
     // Send request
     client := &http.Client{Timeout: 30 * time.Second}
@@ -469,7 +473,7 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 ```go
 type AccountConfig struct {
     ServerURL    string `yaml:"server_url"`     // Apito server URL for plugin management
-    CloudSyncKey string `yaml:"cloud_sync_key"` // Cloud sync key for authentication
+    CloudSyncKey string `yaml:"cloud_sync_key"` // Apito access token (apt_...) for authentication
 }
 
 type CLIConfig struct {
@@ -481,7 +485,7 @@ type CLIConfig struct {
 
     // Legacy fields for backward compatibility
     ServerURL    string `yaml:"server_url,omitempty"`     // Legacy: Apito server URL
-    CloudSyncKey string `yaml:"cloud_sync_key,omitempty"` // Legacy: Cloud sync key
+    CloudSyncKey string `yaml:"cloud_sync_key,omitempty"` // Legacy: access token
 }
 ```
 
@@ -606,9 +610,9 @@ func loadCLIConfig() (*CLIConfig, error) {
 
 ### Authentication
 
-- **Cloud Sync Key**: Used for server authentication
-- **Header**: `X-Apito-Sync-Key` for API requests
-- **Storage**: Keys stored in local configuration file
+- **Access Token**: Unified `apt_` access token used for server authentication (generated in Console → Access Token). Legacy `cli-`/`sdk-`/`mcp-` prefixed keys are retired (`TOKEN_FORMAT_RETIRED`).
+- **Header**: `Authorization: Bearer <apt_...>` plus `X-Use-Cookies: false` for headless API requests; `X-Apito-Project-Id` scopes sync operations to a project.
+- **Storage**: Tokens stored in local configuration file (`~/.apito/config.yml`, field `cloud_sync_key`).
 - **Transmission**: HTTPS for all server communication
 
 ### File System

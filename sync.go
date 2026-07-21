@@ -78,7 +78,8 @@ var syncCmd = &cobra.Command{
 	Short: "Sync schema or content between Apito accounts/projects",
 	Long: `Sync schema (models, fields, relations) or content between two configured accounts.
 
-Uses the system GraphQL API (/system/graphql) with access tokens (cli-/mcp-/sdk-).
+Uses the system GraphQL API (/system/graphql) with unified apt_ access tokens
+(Authorization: Bearer). Legacy cli-/mcp-/sdk- prefixed keys are retired.
 Schema changes are staged as drafts on pro engines — publish from Console when ready.`,
 	RunE: runSyncCommand,
 }

@@ -511,7 +511,8 @@ func listPlugins(accountName string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -589,7 +590,8 @@ func getPluginStatus(pluginID, accountName string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -799,7 +801,8 @@ func controlPlugin(pluginID, action, accountName string) {
 		return
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -881,7 +884,8 @@ func performPluginDeleteRequest(pluginID, accountName string) (int, []byte, erro
 		return 0, nil, err
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -1186,7 +1190,8 @@ func getServerPlatformInfo(serverURL, cloudSyncKey string) (*ServerPlatformInfo,
 		return nil, err
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -1326,7 +1331,8 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Apito-Sync-Key", cloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 
 	// Send request
 	client := &http.Client{Timeout: 5 * time.Minute} // Longer timeout for uploads

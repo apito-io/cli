@@ -15,7 +15,7 @@ func TestIsFilesystemSyncSide_ConfiguredLocalIsRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(apitoDir, "config.yml")
-	body := []byte("accounts:\n  local:\n    server_url: http://localhost:5050\n    cloud_sync_key: cli-x\n")
+	body := []byte("accounts:\n  local:\n    server_url: http://localhost:5050\n    cloud_sync_key: apt_x\n")
 	if err := os.WriteFile(cfgPath, body, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestIsFilesystemSyncSide_LegacyLocalWithoutAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(apitoDir, "config.yml")
-	body := []byte("accounts:\n  prod:\n    server_url: https://example.com\n    cloud_sync_key: cli-x\n")
+	body := []byte("accounts:\n  prod:\n    server_url: https://example.com\n    cloud_sync_key: apt_x\n")
 	if err := os.WriteFile(cfgPath, body, 0o644); err != nil {
 		t.Fatal(err)
 	}

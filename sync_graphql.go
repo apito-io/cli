@@ -11,10 +11,9 @@ import (
 )
 
 const (
-	headerApitoKey       = "X-Apito-Key"
-	headerApitoSyncKey   = "X-Apito-Sync-Key"
 	headerApitoProjectID = "X-Apito-Project-Id"
 	headerApitoTenantID  = "X-Apito-Tenant-ID"
+	headerUseCookies     = "X-Use-Cookies"
 )
 
 type SyncGraphQLClient struct {
@@ -229,14 +228,13 @@ func (c *SyncGraphQLClient) execute(query string, variables map[string]interface
 	return json.Unmarshal(gqlResp.Data, dest)
 }
 
+// setAuthHeaders sends the unified apt_ access token as a standard bearer
+// credential. X-Use-Cookies: false tells the engine this is a headless API
+// call (no browser session cookies), and X-Apito-Project-Id scopes the
+// request to the selected project within the token's project_ids grant.
 func (c *SyncGraphQLClient) setAuthHeaders(req *http.Request) {
-	token := c.token
-	if strings.HasPrefix(token, "cli-") || strings.HasPrefix(token, "sdk-") || strings.HasPrefix(token, "mcp-") {
-		req.Header.Set(headerApitoKey, token)
-		req.Header.Set(headerApitoSyncKey, token)
-	} else {
-		req.Header.Set(headerApitoKey, token)
-	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set(headerUseCookies, "false")
 	if c.projectID != "" {
 		req.Header.Set(headerApitoProjectID, c.projectID)
 	}

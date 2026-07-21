@@ -79,7 +79,7 @@
 - **Add from Registry**: Install plugins with `apito plugin add <name>` from the official registry or any GitHub URL
 - **Hot Reload Plugins**: Deploy and update HashiCorp plugins without server restarts
 - **Multi-language Support**: Create plugins in Go, JavaScript, or Python
-- **Secure Deployment**: Cloud sync key authentication for plugin operations
+- **Secure Deployment**: Unified `apt_` access token authentication for plugin operations
 - **Plugin Lifecycle Management**: Create, deploy, update, start, stop, restart, and delete plugins
 - **Template Scaffolding**: Generate plugin scaffolds with best practices built-in
 - **Real-time Status Monitoring**: Live plugin status and health checks
@@ -544,7 +544,7 @@ Apito CLI provides a comprehensive plugin management system that allows you to c
 
 #### `config` - Manage CLI Configuration
 
-Configure accounts, server URLs, cloud sync keys, and other CLI settings for plugin management.
+Configure accounts, server URLs, access tokens (`apt_...`), and other CLI settings for plugin management.
 
 **Usage:**
 
@@ -572,7 +572,7 @@ apito config <command> [options]
 **Account Configuration:**
 
 - `url` - Apito server URL for the account
-- `key` - Cloud sync key for the account
+- `key` - Apito access token (`apt_...`) for the account, generated in Console → Access Token. Legacy `cli-`/`sdk-`/`mcp-` prefixed keys are retired and rejected with `TOKEN_FORMAT_RETIRED`.
 
 **Interactive Account Selection:**
 
@@ -755,7 +755,7 @@ apito plugin <command> [options]
 - **Hot Reload**: Deploy and update plugins without server restarts
 - **Process Isolation**: HashiCorp go-plugin framework for fault tolerance
 - **Multi-language Support**: Go, JavaScript, Python plugin development
-- **Secure Deployment**: Cloud sync key authentication
+- **Secure Deployment**: Unified `apt_` access token authentication
 - **Real-time Status**: Live plugin status monitoring and health checks
 - **Template Generation**: Scaffold creation with best practices
 - **Confirmation System**: Sensitive operations require explicit confirmation with detailed operation information
@@ -1320,7 +1320,7 @@ Apito CLI sets up the following structure:
 ├── run/                     # Process PID files (Manual mode)
 │   ├── engine.pid
 │   └── console.pid
-└── config.yml               # CLI config (mode, plugin server URL, cloud sync key)
+└── config.yml               # CLI config (mode, plugin server URL, access token)
 ```
 
 **Logging & Monitoring:**
@@ -1347,7 +1347,7 @@ The CLI manages two types of configuration:
 - `accounts` - Account configurations map (supports multiple accounts)
   - `account_name` - Account configuration
     - `server_url` - Apito server URL for the account
-    - `cloud_sync_key` - Authentication key for the account
+    - `cloud_sync_key` - Apito access token (`apt_...`) for the account
 
 **Setting Account Configuration:**
 
@@ -1701,8 +1701,8 @@ apito plugin build                  # Interactive: select system build if Docker
 apito plugin build --build system   # Non-interactive: force system build
 
 # Plugin deployment authentication
-apito config set cloud_sync_key <your-key>  # Update auth key
-apito config set server_url <your-url>      # Update server URL
+apito config set cloud_sync_key <your-apt_-token>  # Update access token
+apito config set server_url <your-url>             # Update server URL
 ```
 
 **Plugin Runtime Issues:**

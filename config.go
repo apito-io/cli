@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // AccountConfig represents configuration for a single account
 type AccountConfig struct {
 	ServerURL    string `yaml:"server_url"`     // Apito server URL for plugin management
-	CloudSyncKey string `yaml:"cloud_sync_key"` // Cloud sync key for authentication
+	CloudSyncKey string `yaml:"cloud_sync_key"` // Apito access token (apt_...) for authentication
 }
 
 type CLIConfig struct {
@@ -30,7 +31,7 @@ type CLIConfig struct {
 
 	// Legacy fields for backward compatibility
 	ServerURL    string `yaml:"server_url,omitempty"`     // Legacy: Apito server URL
-	CloudSyncKey string `yaml:"cloud_sync_key,omitempty"` // Legacy: Cloud sync key
+	CloudSyncKey string `yaml:"cloud_sync_key,omitempty"` // Legacy: access token
 }
 
 func configFilePath() (string, error) {
@@ -173,7 +174,7 @@ func selectAndPersistRunMode() (string, error) {
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage CLI configuration",
-	Long:  `Configure server URL, cloud sync key, and other CLI settings`,
+	Long:  `Configure server URL, access token (apt_...), and other CLI settings`,
 }
 
 var configSetCmd = &cobra.Command{
@@ -362,13 +363,17 @@ func setConfigValue(key, value string) {
 		}
 
 	case "cloud_sync_key", "sync_key", "key":
+		if IsRetiredTokenPrefix(value) {
+			print_error(TokenFormatRetiredMessage)
+			return
+		}
 		// Legacy support - create default account if none exists
 		if len(cfg.Accounts) == 0 {
 			cfg.Accounts["default"] = AccountConfig{}
 			cfg.DefaultAccount = "default"
 		}
 		if len(value) < 10 {
-			print_warning("Cloud sync key seems short, make sure it's correct")
+			print_warning("Access token seems short, make sure it's correct")
 		}
 		// Set for default account
 		if account, exists := cfg.Accounts[cfg.DefaultAccount]; exists {
@@ -605,9 +610,9 @@ func initializePluginConfig() {
 		return
 	}
 
-	// Cloud sync key prompt
+	// Access token prompt
 	keyPrompt := promptui.Prompt{
-		Label:    "Cloud Sync Key",
+		Label:    "Access Token (apt_...)",
 		Validate: validateCloudSyncKey,
 		Mask:     '*',
 	}
@@ -634,10 +639,15 @@ func initializePluginConfig() {
 		cfg.Timeout = parseIntValue(timeout)
 	}
 
+	if IsRetiredTokenPrefix(cloudSyncKey) {
+		print_error(TokenFormatRetiredMessage)
+		return
+	}
+
 	// Create account
 	cfg.Accounts[accountName] = AccountConfig{
 		ServerURL:    strings.TrimSuffix(serverURL, "/"),
-		CloudSyncKey: "cli-" + cloudSyncKey, // this is mandatory prefix for cli sync key
+		CloudSyncKey: cloudSyncKey,
 	}
 
 	// Set as default if it's the first account
@@ -700,10 +710,13 @@ func validateServerURL(input string) error {
 
 func validateCloudSyncKey(input string) error {
 	if input == "" {
-		return fmt.Errorf("cloud sync key is required")
+		return fmt.Errorf("access token is required")
+	}
+	if IsRetiredTokenPrefix(input) {
+		return fmt.Errorf(TokenFormatRetiredMessage)
 	}
 	if len(input) < 10 {
-		return fmt.Errorf("cloud sync key seems too short")
+		return fmt.Errorf("access token seems too short")
 	}
 	return nil
 }
@@ -768,8 +781,12 @@ func setAccountConfigValue(accountName, key, value string) {
 		account.ServerURL = strings.TrimSuffix(value, "/")
 
 	case "key", "cloud_sync_key", "sync_key":
+		if IsRetiredTokenPrefix(value) {
+			print_error(TokenFormatRetiredMessage)
+			return
+		}
 		if len(value) < 10 {
-			print_warning("Cloud sync key seems short, make sure it's correct")
+			print_warning("Access token seems short, make sure it's correct")
 		}
 		account.CloudSyncKey = value
 
@@ -817,9 +834,9 @@ func createAccount(accountName string) {
 		return
 	}
 
-	// Cloud sync key prompt
+	// Access token prompt
 	keyPrompt := promptui.Prompt{
-		Label:    "Cloud Sync Key",
+		Label:    "Access Token (apt_...)",
 		Validate: validateCloudSyncKey,
 		Mask:     '*',
 	}
@@ -827,6 +844,11 @@ func createAccount(accountName string) {
 	cloudSyncKey, err := keyPrompt.Run()
 	if err != nil {
 		print_error("Account creation cancelled")
+		return
+	}
+
+	if IsRetiredTokenPrefix(cloudSyncKey) {
+		print_error(TokenFormatRetiredMessage)
 		return
 	}
 
@@ -1059,7 +1081,11 @@ func getAccountConfig(accountName string) (AccountConfig, error) {
 	}
 
 	if account.CloudSyncKey == "" {
-		return AccountConfig{}, fmt.Errorf("account '%s' has no cloud sync key configured", accountName)
+		return AccountConfig{}, fmt.Errorf("account '%s' has no access token configured", accountName)
+	}
+
+	if IsRetiredTokenPrefix(account.CloudSyncKey) {
+		return AccountConfig{}, fmt.Errorf("account '%s': %s", accountName, TokenFormatRetiredMessage)
 	}
 
 	return account, nil
@@ -1090,13 +1116,18 @@ func testAccountConnection(accountName string) {
 	}
 
 	if account.CloudSyncKey == "" {
-		print_error("Account has no cloud sync key configured")
-		print_status("Set cloud sync key with: apito config set account " + accountName + " key <key>")
+		print_error("Account has no access token configured")
+		print_status("Set access token with: apito config set account " + accountName + " key <apt_...>")
+		return
+	}
+
+	if IsRetiredTokenPrefix(account.CloudSyncKey) {
+		print_error(TokenFormatRetiredMessage)
 		return
 	}
 
 	print_status(fmt.Sprintf("Server URL: %s", account.ServerURL))
-	print_status(fmt.Sprintf("Cloud Sync Key: %s", maskSensitiveValue("key", account.CloudSyncKey)))
+	print_status(fmt.Sprintf("Access Token: %s", maskSensitiveValue("key", account.CloudSyncKey)))
 	print_status("Testing connection...")
 
 	// Test connection
@@ -1104,14 +1135,15 @@ func testAccountConnection(accountName string) {
 		Timeout: time.Duration(cfg.Timeout) * time.Second,
 	}
 
-	// Test authenticated endpoint with sync key
+	// Test authenticated endpoint with the unified apt_ access token.
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/system/health", account.ServerURL), nil)
 	if err != nil {
 		print_error("Failed to create test request: " + err.Error())
 		return
 	}
 
-	req.Header.Set("X-Apito-Sync-Key", account.CloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -1128,11 +1160,16 @@ func testAccountConnection(accountName string) {
 
 	if resp.StatusCode == 200 {
 		print_success("✅ Connection test successful")
-		print_status("Server is reachable and sync key is valid")
-	} else if resp.StatusCode == 401 {
-		print_error("❌ Authentication failed")
-		print_status("Sync key is invalid or expired")
-		print_status("Update the key with: apito config set account " + accountName + " key <new-key>")
+		print_status("Server is reachable and the access token is valid")
+	} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		body, _ := io.ReadAll(resp.Body)
+		if strings.Contains(string(body), "TOKEN_FORMAT_RETIRED") {
+			print_error("❌ " + TokenFormatRetiredMessage)
+		} else {
+			print_error("❌ Authentication failed")
+			print_status("Access token is invalid, expired, or lacks project access")
+		}
+		print_status("Update the token with: apito config set account " + accountName + " key <new-apt_...>")
 	} else {
 		print_warning(fmt.Sprintf("⚠️  Server returned status %d", resp.StatusCode))
 		print_status("Server is reachable but may have issues")
