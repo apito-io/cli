@@ -4,6 +4,13 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-21 — access-token header contracts
+
+- **Changed:** Added focused tests for canonical project/tenant/headless headers
+  and retired `cli-` / `sdk-` / `mcp-` token recognition.
+- **Why:** Lock CLI parity with SDK access-token request scoping without aliases.
+- **Affected:** `sync_graphql_headers_test.go` only; no runtime behavior change.
+
 ## 2026-07-20 — release v0.4.2
 
 - **Changed:** Tag **v0.4.2** — ships `sync --type functions` + active-revision
@@ -31,4 +38,4 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 - **Why:** Cross-LLM durable knowledge + working memory.
 - **Affected:** this repo only.
 
-Last Updated: 2026-07-20
+Last Updated: 2026-07-21

@@ -4,6 +4,8 @@
 - `main` → release **v0.4.2**
 
 ## Done (2026-07-18→20)
+- **2026-07-21:** Added focused canonical project-header and retired-prefix
+  contract tests; CLI behavior remains hard-cut `apt_` only.
 - `sync --type functions` in menu (schema → functions → content)
 - Flags: `--dir`, `--deploy`, `--include-secrets`; reserved account `local`
 - Modules: `sync_functions.go`, `sync_function_fs.go`, `sync_function_diff.go`
@@ -25,4 +27,4 @@
 - Plan `.cursor/plans/mcp_cli_functions_74d67203.plan.md` unless user asks
 
 ## Last Updated
-2026-07-20
+2026-07-21
