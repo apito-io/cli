@@ -13,6 +13,7 @@ const (
 	ChangeAddModel      SchemaChangeKind = "add_model"
 	ChangeAddField      SchemaChangeKind = "add_field"
 	ChangeUpdateField   SchemaChangeKind = "update_field"
+	ChangeDeleteField   SchemaChangeKind = "delete_field"
 	ChangeAddConnection SchemaChangeKind = "add_connection"
 )
 
@@ -54,10 +55,22 @@ func flattenModelFields(model SyncModel) []SyncField {
 	return out
 }
 
+// fieldSyncKey uniquely identifies a field within a model for sync matching.
+// Nested/repeated subfields often reuse identifiers (_id, price, quantity);
+// keying by identifier alone collapses them and creates false update_field diffs.
+func fieldSyncKey(f SyncField) string {
+	parent := strings.ToLower(strings.TrimSpace(f.ParentField))
+	id := strings.ToLower(strings.TrimSpace(f.Identifier))
+	if parent == "" {
+		return id
+	}
+	return parent + "." + id
+}
+
 func fieldMap(fields []SyncField) map[string]SyncField {
 	m := make(map[string]SyncField, len(fields))
 	for _, f := range fields {
-		m[strings.ToLower(f.Identifier)] = f
+		m[fieldSyncKey(f)] = f
 	}
 	return m
 }
@@ -194,11 +207,11 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 		})
 
 		for _, sf := range srcFields {
-			df, ok := dstFields[strings.ToLower(sf.Identifier)]
+			df, ok := dstFields[fieldSyncKey(sf)]
 			fieldCopy := sf
 			if !ok {
 				changes = append(changes, SchemaChange{
-					ID:      fmt.Sprintf("field:%s:%s", src.Name, sf.Identifier),
+					ID:      fmt.Sprintf("field:%s:%s", src.Name, fieldSyncKey(sf)),
 					Kind:    ChangeAddField,
 					Model:   src.Name,
 					Field:   &fieldCopy,
@@ -208,7 +221,7 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 			}
 			if !fieldsMatchForSync(sf, df) {
 				changes = append(changes, SchemaChange{
-					ID:      fmt.Sprintf("field-update:%s:%s", src.Name, sf.Identifier),
+					ID:      fmt.Sprintf("field-update:%s:%s", src.Name, fieldSyncKey(sf)),
 					Kind:    ChangeUpdateField,
 					Model:   src.Name,
 					Field:   &fieldCopy,
@@ -261,6 +274,106 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 		}
 	}
 	return diffs
+}
+
+// computeSchemaDeleteDiff finds fields present on destination but missing on
+// source (destination-only). These are optional destructive removes — not
+// included in computeSchemaDiff so additive sync stays safe by default.
+func computeSchemaDeleteDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
+	srcMap := make(map[string]SyncModel, len(sourceModels))
+	for _, m := range sourceModels {
+		srcMap[strings.ToLower(m.Name)] = m
+	}
+
+	modelNames := make([]string, 0, len(destModels))
+	for _, m := range destModels {
+		modelNames = append(modelNames, strings.ToLower(m.Name))
+	}
+	sort.Strings(modelNames)
+
+	seen := make(map[string]struct{}, len(modelNames))
+	var diffs []ModelSchemaDiff
+	for _, modelKey := range modelNames {
+		if _, ok := seen[modelKey]; ok {
+			continue
+		}
+		seen[modelKey] = struct{}{}
+
+		var dst SyncModel
+		for _, m := range destModels {
+			if strings.EqualFold(m.Name, modelKey) {
+				dst = m
+				break
+			}
+		}
+		src, srcExists := srcMap[modelKey]
+		if !srcExists {
+			// Entire model missing on source — model delete is out of scope for now.
+			continue
+		}
+
+		srcFields := fieldMap(flattenModelFields(src))
+		dstFields := flattenModelFields(dst)
+		sort.Slice(dstFields, func(i, j int) bool {
+			if dstFields[i].ParentField != dstFields[j].ParentField {
+				return dstFields[i].ParentField < dstFields[j].ParentField
+			}
+			return dstFields[i].Serial < dstFields[j].Serial
+		})
+
+		var changes []SchemaChange
+		for _, df := range dstFields {
+			if _, ok := srcFields[fieldSyncKey(df)]; ok {
+				continue
+			}
+			fieldCopy := df
+			changes = append(changes, SchemaChange{
+				ID:      fmt.Sprintf("field-delete:%s:%s", dst.Name, fieldSyncKey(df)),
+				Kind:    ChangeDeleteField,
+				Model:   dst.Name,
+				Field:   &fieldCopy,
+				Summary: fmt.Sprintf("Delete field %q on %q", df.Identifier, dst.Name),
+			})
+		}
+		if len(changes) > 0 {
+			diffs = append(diffs, ModelSchemaDiff{Model: dst.Name, Changes: changes})
+		}
+	}
+	return diffs
+}
+
+func mergeSchemaDiffs(parts ...[]ModelSchemaDiff) []ModelSchemaDiff {
+	byModel := make(map[string]*ModelSchemaDiff)
+	order := make([]string, 0)
+	for _, part := range parts {
+		for _, md := range part {
+			key := strings.ToLower(md.Model)
+			existing, ok := byModel[key]
+			if !ok {
+				cp := ModelSchemaDiff{Model: md.Model, Changes: append([]SchemaChange{}, md.Changes...)}
+				byModel[key] = &cp
+				order = append(order, key)
+				continue
+			}
+			existing.Changes = append(existing.Changes, md.Changes...)
+		}
+	}
+	out := make([]ModelSchemaDiff, 0, len(order))
+	for _, key := range order {
+		out = append(out, *byModel[key])
+	}
+	return out
+}
+
+func partitionSchemaChanges(changes []SchemaChange) (additive, deletes []SchemaChange) {
+	for _, ch := range changes {
+		if ch.Kind == ChangeDeleteField {
+			deletes = append(deletes, ch)
+			continue
+		}
+		additive = append(additive, ch)
+	}
+	return additive, deletes
 }
 
 func printModelDiffHeader(model string, changes []SchemaChange) {

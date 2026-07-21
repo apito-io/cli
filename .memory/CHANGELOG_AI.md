@@ -4,6 +4,16 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-21→22 — schema sync nested keys + optional deletes
+
+- **Changed:** Nested field sync keys by `parent.identifier`; detect
+  destination-only fields as optional `delete_field`; interactive scope prompt
+  and `--include-deletes`; apply via `modelFieldOperation(type: delete)`.
+- **Why:** Stop Rosna false update noise; surface Protiva teacher fields removed
+  locally but still on prod, without auto-applying destructive deletes.
+- **Affected:** `sync_diff.go`, `sync_plan.go`, `sync_schema.go`, `sync_apply.go`,
+  `sync_graphql.go`, `sync.go`, `sync_diff_test.go`. Uncommitted — ask before push.
+
 ## 2026-07-21 — access-token header contracts
 
 - **Changed:** Added focused tests for canonical project/tenant/headless headers

@@ -1,30 +1,32 @@
 # cli — Handoff
 
 ## Branch
-- `main` → release **v0.4.2**
 
-## Done (2026-07-18→20)
-- **2026-07-21:** Added focused canonical project-header and retired-prefix
-  contract tests; CLI behavior remains hard-cut `apt_` only.
-- `sync --type functions` in menu (schema → functions → content)
-- Flags: `--dir`, `--deploy`, `--include-secrets`; reserved account `local`
-- Modules: `sync_functions.go`, `sync_function_fs.go`, `sync_function_diff.go`
-- GraphQL: `ProjectFunctionsInfo` / `UpsertFunction` / `DeployFunction` +
-  `active_revision_hash` deploy parity
-- Local layout: `{dir}/{name}/meta.json` + `source.ts`
-- Docs: `.knowledge/features/apito-sync.md`; tests: `sync_functions_test.go`
-- CI: release workflow Go bumped to **1.25.5** (matches `go.mod`)
+- `main` (dirty: schema sync nested keys + deletes)
+
+## Done (2026-07-21→22)
+
+- `fieldSyncKey` / `fieldMap` use `parent.identifier`
+- `computeSchemaDeleteDiff` for destination-only fields
+- Scope prompt: additive | full | deletes-only | cancel
+- `--include-deletes`; `--yes` skips deletes unless that flag is set
+- `SyncGraphQLClient.DeleteField` → `modelFieldOperation(type: delete)`
+- Tests: nested collision, Protiva-style deletes, task order
 
 ## Broken / watch
-- Local→project requires `--dir`; both sides cannot be `local`
-- Function definition sync is tenant-agnostic; pass tenant at invoke/test time
-- GoReleaser needs `GORELEASER_GITHUB_TOKEN` for GitHub release + homebrew-tap
+
+- Nested flatten is still one `SubFieldInfo` level (same as add path)
+- Model-level delete / relation delete still out of scope
 
 ## Next
-- Verify https://github.com/apito-io/cli/releases/tag/v0.4.2 after push
+
+- Commit/push after user confirmation
+- Smoke Protiva sync: expect teacher deletes when Full/Deletes-only chosen
 
 ## Do not touch
-- Plan `.cursor/plans/mcp_cli_functions_74d67203.plan.md` unless user asks
+
+- Do not default `--yes` to include deletes
 
 ## Last Updated
-2026-07-21
+
+2026-07-22

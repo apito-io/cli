@@ -391,6 +391,40 @@ func (c *SyncGraphQLClient) AddModel(name string, singleRecord bool) error {
 	}, &out)
 }
 
+// DeleteField stages removal of a field via system modelFieldOperation(type: delete).
+// Nested fields must set ParentField to the immediate parent identifier.
+func (c *SyncGraphQLClient) DeleteField(modelName string, field SyncField) error {
+	const mutation = `
+		mutation DeleteField(
+			$type: FIELD_OPERATION_TYPE_ENUM!
+			$model_name: String!
+			$field_name: String!
+			$parent_field: String
+		) {
+			modelFieldOperation(
+				type: $type
+				model_name: $model_name
+				field_name: $field_name
+				parent_field: $parent_field
+			) {
+				identifier
+			}
+		}
+	`
+	vars := map[string]interface{}{
+		"type":       "delete",
+		"model_name": modelName,
+		"field_name": field.Identifier,
+	}
+	if field.ParentField != "" {
+		vars["parent_field"] = field.ParentField
+	}
+	var out struct {
+		ModelFieldOperation SyncField `json:"modelFieldOperation"`
+	}
+	return c.execute(mutation, vars, &out)
+}
+
 func (c *SyncGraphQLClient) UpsertField(modelName string, field SyncField, isUpdate bool) error {
 	const mutation = `
 		mutation UpsertField(

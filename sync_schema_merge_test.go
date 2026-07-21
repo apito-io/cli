@@ -53,6 +53,16 @@ func TestIsIdempotentDraftError(t *testing.T) {
 	}
 }
 
+func TestIsSchemaApplyTimeout(t *testing.T) {
+	err := fmt.Errorf(`Post "https://engine.udbhabon.com/system/graphql": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)
+	if !isSchemaApplyTimeout(err) {
+		t.Fatal("expected schema apply timeout")
+	}
+	if msg := draftStageSuccessMessage(err); msg == "" {
+		t.Fatal("expected soft-success message for timeout")
+	}
+}
+
 func TestBuildSyncTasks_Order(t *testing.T) {
 	changes := []SchemaChange{
 		{ID: "c1", Kind: ChangeAddConnection, Model: "author", Connection: &SyncConnection{Model: "book"}},

@@ -18,7 +18,8 @@ var (
 	syncYes           bool
 	syncDir           string
 	syncDeploy        bool
-	syncIncludeSecret bool
+	syncIncludeSecret  bool
+	syncIncludeDeletes bool
 )
 
 // filesystemAccountName is the reserved account name that maps to a local
@@ -93,6 +94,7 @@ func init() {
 	syncCmd.Flags().StringVar(&syncDir, "dir", "", "Local functions directory (default: ~/.apito/temp/functions when using filesystem)")
 	syncCmd.Flags().BoolVar(&syncDeploy, "deploy", false, "After upserting functions, deploy a new active revision on the destination")
 	syncCmd.Flags().BoolVar(&syncIncludeSecret, "include-secrets", false, "Copy rest_api_secret_url_key instead of regenerating on the destination")
+	syncCmd.Flags().BoolVar(&syncIncludeDeletes, "include-deletes", false, "Include destination-only field deletes in schema sync (destructive; with --yes skips the scope prompt)")
 	rootCmd.AddCommand(syncCmd)
 }
 
@@ -108,6 +110,12 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 	timeoutSec := cfg.Timeout
 	if timeoutSec <= 0 {
 		timeoutSec = 30
+	}
+	// Schema mutations on pro engines often wait on Litestream/replica sync before
+	// returning headers; the old 30s default commonly times out after the draft was
+	// already staged. Floor sync HTTP timeout at 120s unless the user set higher.
+	if timeoutSec < 120 {
+		timeoutSec = 120
 	}
 
 	// Prompt order: FROM account → FROM project → TO account → TO project
@@ -191,7 +199,7 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 
 	switch kind {
 	case "schema":
-		return runSchemaSync(fromClient, toClient, endpoints, syncDryRun, syncYes)
+		return runSchemaSync(fromClient, toClient, endpoints, syncDryRun, syncYes, syncIncludeDeletes)
 	case "functions":
 		return runFunctionSync(fromClient, toClient, endpoints, syncDeploy, syncIncludeSecret, syncDryRun, syncYes)
 	case "content":

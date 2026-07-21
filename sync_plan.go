@@ -52,7 +52,22 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		if ch.Field == nil {
 			return ch.Summary
 		}
+		if ch.Field.ParentField != "" {
+			return fmt.Sprintf("Update field %q (%s) on %q.%s", ch.Field.Label, ch.Field.Identifier, ch.Model, ch.Field.ParentField)
+		}
 		return fmt.Sprintf("Update field %q (%s) on %q", ch.Field.Label, ch.Field.Identifier, ch.Model)
+	case ChangeDeleteField:
+		if ch.Field == nil {
+			return ch.Summary
+		}
+		label := ch.Field.Label
+		if label == "" {
+			label = ch.Field.Identifier
+		}
+		if ch.Field.ParentField != "" {
+			return fmt.Sprintf("Delete field %q (%s) on %q.%s", label, ch.Field.Identifier, ch.Model, ch.Field.ParentField)
+		}
+		return fmt.Sprintf("Delete field %q (%s) on %q", label, ch.Field.Identifier, ch.Model)
 	case ChangeAddConnection:
 		if ch.Connection == nil {
 			return ch.Summary
@@ -130,6 +145,14 @@ func formatSchemaChangeShort(ch SchemaChange) string {
 			return ch.Summary
 		}
 		return fmt.Sprintf("%s — update field %s", ch.Model, ch.Field.Identifier)
+	case ChangeDeleteField:
+		if ch.Field == nil {
+			return ch.Summary
+		}
+		if ch.Field.ParentField != "" {
+			return fmt.Sprintf("%s — delete field %s.%s", ch.Model, ch.Field.ParentField, ch.Field.Identifier)
+		}
+		return fmt.Sprintf("%s — delete field %s", ch.Model, ch.Field.Identifier)
 	case ChangeAddConnection:
 		if ch.Connection == nil {
 			return ch.Summary
@@ -158,6 +181,48 @@ func printApplyConfirmationBlock(endpoints SyncEndpoints, changes []SchemaChange
 		fmt.Printf("    • [%d] %s\n", i+1, formatSchemaChangeDetail(ch))
 	}
 	fmt.Println()
+}
+
+type schemaDiffScope int
+
+const (
+	schemaDiffScopeAdditive schemaDiffScope = iota
+	schemaDiffScopeFull
+	schemaDiffScopeDeletesOnly
+	schemaDiffScopeCancel
+)
+
+func selectSchemaDiffScope(additiveCount, deleteCount int) (schemaDiffScope, error) {
+	fmt.Println()
+	print_status(fmt.Sprintf(
+		"Diff scope: %d add/update/relation change(s), %d destination-only field delete(s).",
+		additiveCount, deleteCount,
+	))
+	options := []string{
+		"Add/update only (skip deletes)",
+		"Full diff (include deletes)",
+		"Deletes only",
+		"Cancel",
+	}
+	var mode string
+	if err := survey.AskOne(&survey.Select{
+		Message: "What should the sync plan include?",
+		Options: options,
+		Default: options[0],
+		Help:    "Deletes remove fields that exist only on the destination. They stage until Console publish.",
+	}, &mode); err != nil {
+		return schemaDiffScopeCancel, fmt.Errorf("selection cancelled: %w", err)
+	}
+	switch mode {
+	case options[0]:
+		return schemaDiffScopeAdditive, nil
+	case options[1]:
+		return schemaDiffScopeFull, nil
+	case options[2]:
+		return schemaDiffScopeDeletesOnly, nil
+	default:
+		return schemaDiffScopeCancel, nil
+	}
 }
 
 func selectSchemaChanges(allChanges []SchemaChange, autoYes bool) ([]SchemaChange, error) {

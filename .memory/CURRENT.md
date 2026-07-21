@@ -1,18 +1,21 @@
 # cli — Current
 
 **Branch:** `main`
-**Release:** tagging **v0.4.2** (functions sync)
 
 ## Working on
-- **2026-07-21:** Focused tests lock `X-Apito-Project-Id`, bearer/headless,
-  tenant header, and retired token-prefix contracts. No compatibility behavior.
-- **Functions sync (2026-07-18→20):** `apito sync --type functions` ready for
-  release — project↔project, local dir, `--deploy`, `--include-secrets`,
-  active-revision deploy parity. Releasing as **v0.4.2**.
+
+- **2026-07-21→22:** Schema sync reliability:
+  - Nested field keys (`parent.identifier`) — no more false `update_field`
+  - Optional destination-only **delete field** plan with scope prompt +
+    `--include-deletes`
+  - Apply deletes via `modelFieldOperation(type: delete)`
+  - Uncommitted — ask before commit/push
 
 ## Next
-- Confirm GitHub Actions GoReleaser succeeded for `v0.4.2`
-- Optional: smoke `apito self-upgrade` / Homebrew tap update
+
+- User rebuilds `go build -o apito-cli` and re-runs Protiva/Rosna schema sync
+- Confirm commit of sync_diff / plan / schema / apply / graphql / sync.go
 
 ## Last Updated
-2026-07-21
+
+2026-07-22

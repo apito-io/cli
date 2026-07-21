@@ -46,13 +46,15 @@ func taskStatusIcon(status taskStatus) string {
 }
 
 func buildSyncTasks(changes []SchemaChange) []SyncTask {
-	var modelAdds, fieldChanges, connChanges []SchemaChange
+	var modelAdds, fieldChanges, fieldDeletes, connChanges []SchemaChange
 	for _, ch := range changes {
 		switch ch.Kind {
 		case ChangeAddModel:
 			modelAdds = append(modelAdds, ch)
 		case ChangeAddField, ChangeUpdateField:
 			fieldChanges = append(fieldChanges, ch)
+		case ChangeDeleteField:
+			fieldDeletes = append(fieldDeletes, ch)
 		case ChangeAddConnection:
 			connChanges = append(connChanges, ch)
 		}
@@ -62,26 +64,30 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 		return strings.ToLower(modelAdds[i].Model) < strings.ToLower(modelAdds[j].Model)
 	})
 
-	sort.Slice(fieldChanges, func(i, j int) bool {
-		a, b := fieldChanges[i], fieldChanges[j]
-		if !strings.EqualFold(a.Model, b.Model) {
-			return strings.ToLower(a.Model) < strings.ToLower(b.Model)
-		}
-		aParent, bParent := "", ""
-		aSerial, bSerial := 0, 0
-		if a.Field != nil {
-			aParent = a.Field.ParentField
-			aSerial = a.Field.Serial
-		}
-		if b.Field != nil {
-			bParent = b.Field.ParentField
-			bSerial = b.Field.Serial
-		}
-		if aParent != bParent {
-			return aParent < bParent
-		}
-		return aSerial < bSerial
-	})
+	sortFieldChanges := func(list []SchemaChange) {
+		sort.Slice(list, func(i, j int) bool {
+			a, b := list[i], list[j]
+			if !strings.EqualFold(a.Model, b.Model) {
+				return strings.ToLower(a.Model) < strings.ToLower(b.Model)
+			}
+			aParent, bParent := "", ""
+			aSerial, bSerial := 0, 0
+			if a.Field != nil {
+				aParent = a.Field.ParentField
+				aSerial = a.Field.Serial
+			}
+			if b.Field != nil {
+				bParent = b.Field.ParentField
+				bSerial = b.Field.Serial
+			}
+			if aParent != bParent {
+				return aParent < bParent
+			}
+			return aSerial < bSerial
+		})
+	}
+	sortFieldChanges(fieldChanges)
+	sortFieldChanges(fieldDeletes)
 
 	sort.Slice(connChanges, func(i, j int) bool {
 		a, b := connChanges[i], connChanges[j]
@@ -98,7 +104,8 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 		return strings.ToLower(ak) < strings.ToLower(bk)
 	})
 
-	ordered := append(append(modelAdds, fieldChanges...), connChanges...)
+	// Deletes last: additive work first, then remove destination-only fields.
+	ordered := append(append(append(modelAdds, fieldChanges...), connChanges...), fieldDeletes...)
 	tasks := make([]SyncTask, len(ordered))
 	for i, ch := range ordered {
 		tasks[i] = SyncTask{
@@ -114,7 +121,7 @@ func requiredModelsForChange(ch SchemaChange) []string {
 	switch ch.Kind {
 	case ChangeAddModel:
 		return nil
-	case ChangeAddField, ChangeUpdateField:
+	case ChangeAddField, ChangeUpdateField, ChangeDeleteField:
 		return []string{strings.ToLower(ch.Model)}
 	case ChangeAddConnection:
 		if ch.Connection == nil {
@@ -148,12 +155,28 @@ func isDraftStagedDespiteSyncError(err error) bool {
 		(strings.Contains(msg, "system sync failed") && strings.Contains(msg, "replica sync"))
 }
 
+// isSchemaApplyTimeout is returned when the HTTP client gives up waiting for
+// headers. On pro engines the mutation often still completes and stages the draft
+// (Litestream wait can exceed the old 30s default).
+func isSchemaApplyTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "client.timeout exceeded") ||
+		strings.Contains(msg, "timeout exceeded while awaiting headers")
+}
+
 func draftStageSuccessMessage(err error) string {
 	if isIdempotentDraftError(err) {
 		return "already staged in draft"
 	}
 	if isDraftStagedDespiteSyncError(err) {
 		return "staged in draft (server backup sync deferred)"
+	}
+	if isSchemaApplyTimeout(err) {
+		return "request timed out — verify draft in Console (mutation often still staged)"
 	}
 	return ""
 }
@@ -169,6 +192,11 @@ func applySyncTask(client *SyncGraphQLClient, task SyncTask, srcMap map[string]S
 			return fmt.Errorf("missing field payload")
 		}
 		return client.UpsertField(ch.Model, *ch.Field, ch.Kind == ChangeUpdateField)
+	case ChangeDeleteField:
+		if ch.Field == nil {
+			return fmt.Errorf("missing field payload")
+		}
+		return client.DeleteField(ch.Model, *ch.Field)
 	case ChangeAddConnection:
 		if ch.Connection == nil {
 			return fmt.Errorf("missing connection payload")
