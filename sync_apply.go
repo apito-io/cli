@@ -138,7 +138,10 @@ func isIdempotentDraftError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "already exists in draft")
+	// Only model create is safe to treat as soft-success. Field "already exists
+	// in draft" can be a false positive when parent_field resolves to the wrong
+	// nested group (same identifier at two depths).
+	return strings.Contains(msg, "model ") && strings.Contains(msg, "already exists in draft")
 }
 
 // isDraftStagedDespiteSyncError treats pro staging as success when the draft was

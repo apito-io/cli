@@ -51,6 +51,10 @@ func TestIsIdempotentDraftError(t *testing.T) {
 	if !isIdempotentDraftError(err) {
 		t.Fatal("expected idempotent draft error")
 	}
+	fieldErr := fmt.Errorf(`graphql errors: a field with identifier "name" already exists in draft`)
+	if isIdempotentDraftError(fieldErr) {
+		t.Fatal("field already-exists must not be soft-success (ambiguous parent)")
+	}
 }
 
 func TestIsSchemaApplyTimeout(t *testing.T) {
