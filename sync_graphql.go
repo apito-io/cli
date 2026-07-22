@@ -39,6 +39,14 @@ type SyncFieldValidation struct {
 	Hide                 *bool  `json:"hide"`
 	FixedListElements    []any  `json:"fixed_list_elements"`
 	FixedListElementType string `json:"fixed_list_element_type"`
+	// Structural / upsert-supported flags (module_validation_payload).
+	AsTitle       *bool    `json:"as_title,omitempty"`
+	Placeholder   string   `json:"placeholder,omitempty"`
+	Locals        []string `json:"locals,omitempty"`
+	IsMultiChoice *bool    `json:"is_multi_choice,omitempty"`
+	IsEmail       *bool    `json:"is_email,omitempty"`
+	IsGallery     *bool    `json:"is_gallery,omitempty"`
+	IsURL         *bool    `json:"is_url,omitempty"`
 }
 
 type SyncField struct {
@@ -52,6 +60,10 @@ type SyncField struct {
 	ParentField  string               `json:"parent_field"`
 	SubFieldInfo []SyncField          `json:"sub_field_info"`
 	Validation   *SyncFieldValidation `json:"validation"`
+	// Path is the full dotted ancestry from the model root (e.g.
+	// routine.details.date_and_time). Set during flatten for sync matching;
+	// not from GraphQL. ParentField stays the immediate parent for upserts.
+	Path string `json:"-"`
 }
 
 type SyncConnection struct {
@@ -313,43 +325,57 @@ func (c *SyncGraphQLClient) CurrentProject() (*SyncProject, error) {
 	return &out.CurrentProject, nil
 }
 
+// projectModelsInfoFieldSelection nests sub_field_info to depth 5 so deep
+// repeated/object trees (exam.routine.details…) are visible to schema sync.
+const projectModelsInfoFieldSelection = `
+	identifier
+	label
+	field_type
+	field_sub_type
+	input_type
+	description
+	serial
+	parent_field
+	validation {
+		required
+		unique
+		hide
+		as_title
+		placeholder
+		locals
+		fixed_list_elements
+		fixed_list_element_type
+		is_multi_choice
+		is_email
+		is_gallery
+		is_url
+	}
+`
+
 func (c *SyncGraphQLClient) ProjectModelsInfo(modelName string) ([]SyncModel, error) {
-	const query = `
+	// Engine SubFieldInfo is recursive; selection depth must match product nesting.
+	f := projectModelsInfoFieldSelection
+	query := fmt.Sprintf(`
 		query ProjectModelsInfo($model_name: String) {
 			projectModelsInfo(model_name: $model_name) {
 				name
 				single_page
 				fields {
-					identifier
-					label
-					field_type
-					field_sub_type
-					input_type
-					description
-					serial
-					parent_field
+					%s
 					sub_field_info {
-						identifier
-						label
-						field_type
-						field_sub_type
-						input_type
-						serial
-						parent_field
-						validation {
-							required
-							unique
-							hide
-							fixed_list_elements
-							fixed_list_element_type
+						%s
+						sub_field_info {
+							%s
+							sub_field_info {
+								%s
+								sub_field_info {
+									%s
+									sub_field_info {
+										%s
+									}
+								}
+							}
 						}
-					}
-					validation {
-						required
-						unique
-						hide
-						fixed_list_elements
-						fixed_list_element_type
 					}
 				}
 				connections {
@@ -360,7 +386,7 @@ func (c *SyncGraphQLClient) ProjectModelsInfo(modelName string) ([]SyncModel, er
 				}
 			}
 		}
-	`
+	`, f, f, f, f, f, f)
 	vars := map[string]interface{}{}
 	if modelName != "" {
 		vars["model_name"] = modelName

@@ -45,26 +45,52 @@ func projectSyncProfileKey(p SyncProject) string {
 
 func flattenModelFields(model SyncModel) []SyncField {
 	out := make([]SyncField, 0, len(model.Fields))
-	for _, f := range model.Fields {
-		out = append(out, f)
-		for _, sub := range f.SubFieldInfo {
-			sub.ParentField = f.Identifier
-			out = append(out, sub)
+	var walk func(fields []SyncField, parentID, pathPrefix string)
+	walk = func(fields []SyncField, parentID, pathPrefix string) {
+		for _, f := range fields {
+			copy := f
+			copy.ParentField = parentID
+			path := strings.TrimSpace(f.Identifier)
+			if pathPrefix != "" {
+				path = pathPrefix + "." + path
+			}
+			copy.Path = path
+			// Children are walked separately; clear nested payload on the flat row
+			// so equality checks compare this node only.
+			copy.SubFieldInfo = nil
+			out = append(out, copy)
+			if len(f.SubFieldInfo) > 0 {
+				walk(f.SubFieldInfo, f.Identifier, path)
+			}
 		}
 	}
+	walk(model.Fields, "", "")
 	return out
 }
 
 // fieldSyncKey uniquely identifies a field within a model for sync matching.
 // Nested/repeated subfields often reuse identifiers (_id, price, quantity);
 // keying by identifier alone collapses them and creates false update_field diffs.
+// Prefer full Path (routine.details.date_and_time) so two groups that share an
+// immediate parent identifier do not collide.
 func fieldSyncKey(f SyncField) string {
+	if p := strings.ToLower(strings.TrimSpace(f.Path)); p != "" {
+		return p
+	}
 	parent := strings.ToLower(strings.TrimSpace(f.ParentField))
 	id := strings.ToLower(strings.TrimSpace(f.Identifier))
 	if parent == "" {
 		return id
 	}
 	return parent + "." + id
+}
+
+func fieldPathDepth(f SyncField) int {
+	key := fieldSyncKey(f)
+	if key == "" {
+		return 0
+	}
+	return strings.Count(key, ".")
 }
 
 func fieldMap(fields []SyncField) map[string]SyncField {
@@ -94,10 +120,20 @@ func validationEqualForSync(a, b *SyncFieldValidation) bool {
 	}
 	if !validationBoolEqual(a.Required, b.Required) ||
 		!validationBoolEqual(a.Unique, b.Unique) ||
-		!validationBoolEqual(a.Hide, b.Hide) {
+		!validationBoolEqual(a.Hide, b.Hide) ||
+		!validationBoolEqual(a.AsTitle, b.AsTitle) ||
+		!validationBoolEqual(a.IsMultiChoice, b.IsMultiChoice) ||
+		!validationBoolEqual(a.IsEmail, b.IsEmail) ||
+		!validationBoolEqual(a.IsGallery, b.IsGallery) ||
+		!validationBoolEqual(a.IsURL, b.IsURL) {
 		return false
 	}
-	if a.FixedListElementType != b.FixedListElementType {
+	if a.FixedListElementType != b.FixedListElementType || a.Placeholder != b.Placeholder {
+		return false
+	}
+	la, _ := json.Marshal(a.Locals)
+	lb, _ := json.Marshal(b.Locals)
+	if string(la) != string(lb) {
 		return false
 	}
 	ab, _ := json.Marshal(a.FixedListElements)
@@ -199,11 +235,17 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 
 		srcFields := flattenModelFields(src)
 		dstFields := fieldMap(flattenModelFields(dst))
-		sort.Slice(srcFields, func(i, j int) bool {
-			if srcFields[i].ParentField != srcFields[j].ParentField {
-				return srcFields[i].ParentField < srcFields[j].ParentField
+		// Depth-first ancestry order: parents before children so nested adds
+		// (routine → details → date_and_time) apply cleanly.
+		sort.SliceStable(srcFields, func(i, j int) bool {
+			di, dj := fieldPathDepth(srcFields[i]), fieldPathDepth(srcFields[j])
+			if di != dj {
+				return di < dj
 			}
-			return srcFields[i].Serial < srcFields[j].Serial
+			if srcFields[i].Serial != srcFields[j].Serial {
+				return srcFields[i].Serial < srcFields[j].Serial
+			}
+			return fieldSyncKey(srcFields[i]) < fieldSyncKey(srcFields[j])
 		})
 
 		for _, sf := range srcFields {
@@ -314,11 +356,17 @@ func computeSchemaDeleteDiff(sourceModels, destModels []SyncModel) []ModelSchema
 
 		srcFields := fieldMap(flattenModelFields(src))
 		dstFields := flattenModelFields(dst)
-		sort.Slice(dstFields, func(i, j int) bool {
-			if dstFields[i].ParentField != dstFields[j].ParentField {
-				return dstFields[i].ParentField < dstFields[j].ParentField
+		// Delete deepest children first so parent groups are not removed while
+		// nested ops still reference them.
+		sort.SliceStable(dstFields, func(i, j int) bool {
+			di, dj := fieldPathDepth(dstFields[i]), fieldPathDepth(dstFields[j])
+			if di != dj {
+				return di > dj
 			}
-			return dstFields[i].Serial < dstFields[j].Serial
+			if dstFields[i].Serial != dstFields[j].Serial {
+				return dstFields[i].Serial < dstFields[j].Serial
+			}
+			return fieldSyncKey(dstFields[i]) < fieldSyncKey(dstFields[j])
 		})
 
 		var changes []SchemaChange

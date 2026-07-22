@@ -251,3 +251,199 @@ func TestBuildSyncTasks_DeletesAfterAdditive(t *testing.T) {
 		t.Fatalf("third = %v", tasks[2].Change.Kind)
 	}
 }
+
+func TestFlattenModelFields_Depth2RepeatedAndObject(t *testing.T) {
+	model := SyncModel{
+		Name: "exam",
+		Fields: []SyncField{{
+			Identifier: "routine",
+			FieldType:  "repeated",
+			InputType:  "repeated",
+			SubFieldInfo: []SyncField{
+				{Identifier: "class_code", FieldType: "text", InputType: "string"},
+				{
+					Identifier: "details",
+					FieldType:  "repeated",
+					InputType:  "repeated",
+					SubFieldInfo: []SyncField{
+						{Identifier: "date_and_time", FieldType: "date", InputType: "string"},
+						{Identifier: "subject_code", FieldType: "text", InputType: "string"},
+						{
+							Identifier: "meta",
+							FieldType:  "object",
+							InputType:  "object",
+							SubFieldInfo: []SyncField{
+								{Identifier: "room", FieldType: "text", InputType: "string"},
+							},
+						},
+					},
+				},
+			},
+		}},
+	}
+	flat := flattenModelFields(model)
+	got := map[string]SyncField{}
+	for _, f := range flat {
+		got[fieldSyncKey(f)] = f
+	}
+	for _, key := range []string{
+		"routine",
+		"routine.class_code",
+		"routine.details",
+		"routine.details.date_and_time",
+		"routine.details.subject_code",
+		"routine.details.meta",
+		"routine.details.meta.room",
+	} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("missing flattened path %q in %#v", key, keysOf(got))
+		}
+	}
+	dt := got["routine.details.date_and_time"]
+	if dt.ParentField != "details" {
+		t.Fatalf("immediate parent = %q, want details (upsert parent_field)", dt.ParentField)
+	}
+	if dt.Path != "routine.details.date_and_time" {
+		t.Fatalf("path = %q", dt.Path)
+	}
+}
+
+func TestComputeSchemaDiff_Depth2NestedAddsProtivaExam(t *testing.T) {
+	// Local has details children; prod has empty nested repeated — the bug CLI missed.
+	source := []SyncModel{{
+		Name: "exam",
+		Fields: []SyncField{{
+			Identifier: "routine",
+			Label:      "routine",
+			FieldType:  "repeated",
+			InputType:  "repeated",
+			SubFieldInfo: []SyncField{
+				{Identifier: "class_code", Label: "class_code", FieldType: "text", InputType: "string"},
+				{
+					Identifier: "details",
+					Label:      "details",
+					FieldType:  "repeated",
+					InputType:  "repeated",
+					SubFieldInfo: []SyncField{
+						{Identifier: "date_and_time", Label: "date_and_time", FieldType: "date", InputType: "string"},
+						{Identifier: "subject_code", Label: "subject_code", FieldType: "text", InputType: "string"},
+					},
+				},
+			},
+		}},
+	}}
+	dest := []SyncModel{{
+		Name: "exam",
+		Fields: []SyncField{{
+			Identifier: "routine",
+			Label:      "routine",
+			FieldType:  "repeated",
+			InputType:  "repeated",
+			SubFieldInfo: []SyncField{
+				{Identifier: "class_code", Label: "class_code", FieldType: "text", InputType: "string"},
+				{Identifier: "details", Label: "details", FieldType: "repeated", InputType: "repeated"},
+			},
+		}},
+	}}
+
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 2 {
+		t.Fatalf("changes = %d (%+v), want 2 depth-2 adds", len(changes), changeSummaries(changes))
+	}
+	got := map[string]string{}
+	for _, ch := range changes {
+		if ch.Kind != ChangeAddField || ch.Field == nil {
+			t.Fatalf("unexpected %+v", ch)
+		}
+		got[fieldSyncKey(*ch.Field)] = ch.Field.ParentField
+	}
+	if got["routine.details.date_and_time"] != "details" {
+		t.Fatalf("date_and_time parent = %q", got["routine.details.date_and_time"])
+	}
+	if got["routine.details.subject_code"] != "details" {
+		t.Fatalf("subject_code parent = %q", got["routine.details.subject_code"])
+	}
+}
+
+func TestFieldSyncKey_FullPathDisambiguatesSameImmediateParent(t *testing.T) {
+	a := SyncField{Identifier: "name", ParentField: "sections", Path: "sections.name"}
+	b := SyncField{Identifier: "name", ParentField: "sections", Path: "divisions.sections.name"}
+	if fieldSyncKey(a) == fieldSyncKey(b) {
+		t.Fatalf("paths must disambiguate reused parent identifier, got %q", fieldSyncKey(a))
+	}
+}
+
+func TestComputeSchemaDiff_AddOrderParentsBeforeChildren(t *testing.T) {
+	source := []SyncModel{{
+		Name: "exam",
+		Fields: []SyncField{{
+			Identifier: "routine",
+			FieldType:  "repeated",
+			InputType:  "repeated",
+			Serial:     1,
+			SubFieldInfo: []SyncField{{
+				Identifier: "details",
+				FieldType:  "repeated",
+				InputType:  "repeated",
+				Serial:     1,
+				SubFieldInfo: []SyncField{
+					{Identifier: "date_and_time", FieldType: "date", InputType: "string", Serial: 1},
+				},
+			}},
+		}},
+	}}
+	dest := []SyncModel{{Name: "exam", Fields: nil}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	var paths []string
+	for _, ch := range changes {
+		if ch.Kind == ChangeAddField && ch.Field != nil {
+			paths = append(paths, fieldSyncKey(*ch.Field))
+		}
+	}
+	wantOrder := []string{"routine", "routine.details", "routine.details.date_and_time"}
+	if len(paths) != len(wantOrder) {
+		t.Fatalf("paths = %v, want %v", paths, wantOrder)
+	}
+	for i, w := range wantOrder {
+		if paths[i] != w {
+			t.Fatalf("order[%d] = %q, want %q (full %v)", i, paths[i], w, paths)
+		}
+	}
+}
+
+func TestFieldsMatchForSync_DetectsNestedMultiChoiceChange(t *testing.T) {
+	tTrue, tFalse := true, false
+	a := SyncField{
+		Identifier: "stage",
+		FieldType:  "list",
+		ParentField: "stages",
+		Path:       "stages.stage",
+		Validation: &SyncFieldValidation{IsMultiChoice: &tFalse, FixedListElementType: "string"},
+	}
+	b := SyncField{
+		Identifier: "stage",
+		FieldType:  "list",
+		ParentField: "stages",
+		Path:       "stages.stage",
+		Validation: &SyncFieldValidation{IsMultiChoice: &tTrue, FixedListElementType: "string"},
+	}
+	if fieldsMatchForSync(a, b) {
+		t.Fatal("is_multi_choice change must not match for sync")
+	}
+}
+
+func keysOf(m map[string]SyncField) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func changeSummaries(changes []SchemaChange) []string {
+	out := make([]string, 0, len(changes))
+	for _, ch := range changes {
+		out = append(out, ch.Summary)
+	}
+	return out
+}

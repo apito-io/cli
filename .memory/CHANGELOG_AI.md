@@ -4,6 +4,13 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-22 — nested schema sync depth
+
+- **Changed:** Recursive flatten + Path keys; projectModelsInfo nested to depth 5; structural validation flags in sync equality; live nested exam probe.
+- **Why:** Prod exam.routine.details empty children were invisible to sync while public GraphQL died.
+- **Affected:** sync_graphql.go, sync_diff.go, sync_diff_test.go, sync_live_nested_test.go. Released as v0.4.7 with open-core 1.8.3 / engine 2.4.18.
+
+---
 ## 2026-07-21→22 — schema sync nested keys + optional deletes
 
 - **Changed:** Nested field sync keys by `parent.identifier`; detect
