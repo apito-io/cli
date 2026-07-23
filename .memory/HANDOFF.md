@@ -2,26 +2,31 @@
 
 ## Branch
 
-- `main` (dirty: schema sync nested keys + deletes)
+- `main` clean — tagged **v0.4.8** (pushed)
 
-## Done (2026-07-21→22)
+## Done (2026-07-23 — v0.4.8)
 
-- `fieldSyncKey` / `fieldMap` use `parent.identifier`
-- `computeSchemaDeleteDiff` for destination-only fields
-- Scope prompt: additive | full | deletes-only | cancel
-- `--include-deletes`; `--yes` skips deletes unless that flag is set
-- `SyncGraphQLClient.DeleteField` → `modelFieldOperation(type: delete)`
-- Tests: nested collision, Protiva-style deletes, task order
+- `validationEqualForSync`: nil/empty `Locals` and empty fixed-list slices match
+- Unit test `TestFieldsMatchForSync_EmptyLocalsNilVsSlice`
+- Confirmed live-only vs live+draft: false updates drop from 25 → 0
+
+## Done (2026-07-22→23 — v0.4.7)
+
+- Recursive flatten + full dotted `Path` for sync keys
+- `projectModelsInfo` nested `sub_field_info` to depth 5 + validation selection
+- Prior: optional deletes, soft-success model-only already-exists (v0.4.6)
 
 ## Broken / watch
 
-- Nested flatten is still one `SubFieldInfo` level (same as add path)
-- Model-level delete / relation delete still out of scope
+- Empty execution ledger with pending ops is an **engine** staging order bug
+  (flush before ledger refresh) — not fixed in this CLI release
+- `parent_field` still immediate id — colliding nested parents can mis-target
+- Nesting deeper than 5 under root truncated by GraphQL selection
 
 ## Next
 
-- Commit/push after user confirmation
-- Smoke Protiva sync: expect teacher deletes when Full/Deletes-only chosen
+- Discard empty-ledger drafts; re-sync with v0.4.8
+- Deploy engine StageMutation fix separately when ready
 
 ## Do not touch
 
@@ -29,4 +34,4 @@
 
 ## Last Updated
 
-2026-07-22
+2026-07-23

@@ -29,6 +29,33 @@ func TestFieldsMatchForSync_ValidationNullVsFalse(t *testing.T) {
 	}
 }
 
+func TestFieldsMatchForSync_EmptyLocalsNilVsSlice(t *testing.T) {
+	// Draft schemaPreview often omits locals (nil); live returns []. Must not plan update_field.
+	src := SyncField{
+		Identifier: "type",
+		FieldType:  "list",
+		FieldSubType: "dropdown",
+		Validation: &SyncFieldValidation{
+			Locals:            []string{},
+			FixedListElements: []any{"a", "b"},
+			FixedListElementType: "string",
+		},
+	}
+	dst := SyncField{
+		Identifier: "type",
+		FieldType:  "list",
+		FieldSubType: "dropdown",
+		Validation: &SyncFieldValidation{
+			Locals:            nil,
+			FixedListElements: []any{"a", "b"},
+			FixedListElementType: "string",
+		},
+	}
+	if !fieldsMatchForSync(src, dst) {
+		t.Fatal("expected empty locals [] to match nil locals")
+	}
+}
+
 func TestFieldsMatchForSync_IgnoresLabelSerialInputType(t *testing.T) {
 	src := SyncField{Identifier: "name", Label: "Name", FieldType: "text", InputType: "string", Serial: 3}
 	dst := SyncField{Identifier: "name", Label: "name", FieldType: "text", InputType: "", Serial: 0}

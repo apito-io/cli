@@ -131,13 +131,32 @@ func validationEqualForSync(a, b *SyncFieldValidation) bool {
 	if a.FixedListElementType != b.FixedListElementType || a.Placeholder != b.Placeholder {
 		return false
 	}
-	la, _ := json.Marshal(a.Locals)
-	lb, _ := json.Marshal(b.Locals)
-	if string(la) != string(lb) {
+	// Treat nil and empty slices as equal — draft schemaPreview often omits empty
+	// locals while live returns []. That alone was producing dozens of false update_field diffs.
+	if !stringSliceEqualForSync(a.Locals, b.Locals) {
 		return false
 	}
-	ab, _ := json.Marshal(a.FixedListElements)
-	bb, _ := json.Marshal(b.FixedListElements)
+	return anySliceEqualForSync(a.FixedListElements, b.FixedListElements)
+}
+
+func stringSliceEqualForSync(a, b []string) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	if len(a) != len(b) {
+		return false
+	}
+	la, _ := json.Marshal(a)
+	lb, _ := json.Marshal(b)
+	return string(la) == string(lb)
+}
+
+func anySliceEqualForSync(a, b []any) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	ab, _ := json.Marshal(a)
+	bb, _ := json.Marshal(b)
 	return string(ab) == string(bb)
 }
 

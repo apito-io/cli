@@ -4,6 +4,13 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-23 — false update_field after draft overlay (v0.4.8)
+
+- **Changed:** Treat nil and empty `validation.locals` / fixed-list slices as equal in `validationEqualForSync`.
+- **Why:** After a timed-out schema sync, destination live+draft compare treated draft `locals: null` vs live `locals: []` as real updates (~25 false `Update field` rows on Protiva).
+- **Affected:** `sync_diff.go`, `sync_diff_test.go`. Released as **v0.4.8** (CLI-only; engine empty-ledger-on-timeout is a separate deploy).
+
+---
 ## 2026-07-22 — nested schema sync depth
 
 - **Changed:** Recursive flatten + Path keys; projectModelsInfo nested to depth 5; structural validation flags in sync equality; live nested exam probe.
@@ -19,7 +26,7 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 - **Why:** Stop Rosna false update noise; surface Protiva teacher fields removed
   locally but still on prod, without auto-applying destructive deletes.
 - **Affected:** `sync_diff.go`, `sync_plan.go`, `sync_schema.go`, `sync_apply.go`,
-  `sync_graphql.go`, `sync.go`, `sync_diff_test.go`. Uncommitted — ask before push.
+  `sync_graphql.go`, `sync.go`, `sync_diff_test.go`. Released earlier in v0.4.5–0.4.6 line.
 
 ## 2026-07-21 — access-token header contracts
 
