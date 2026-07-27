@@ -1,9 +1,10 @@
 # cli — AI Changelog
 
-Not git history — the *reasoning* behind changes. Newest on top.
+Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+
 ## 2026-07-23 — false update_field after draft overlay (v0.4.8)
 
 - **Changed:** Treat nil and empty `validation.locals` / fixed-list slices as equal in `validationEqualForSync`.
@@ -11,6 +12,7 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 - **Affected:** `sync_diff.go`, `sync_diff_test.go`. Released as **v0.4.8** (CLI-only; engine empty-ledger-on-timeout is a separate deploy).
 
 ---
+
 ## 2026-07-22 — nested schema sync depth
 
 - **Changed:** Recursive flatten + Path keys; projectModelsInfo nested to depth 5; structural validation flags in sync equality; live nested exam probe.
@@ -18,6 +20,7 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 - **Affected:** sync_graphql.go, sync_diff.go, sync_diff_test.go, sync_live_nested_test.go. Released as v0.4.7 with open-core 1.8.3 / engine 2.4.18.
 
 ---
+
 ## 2026-07-21→22 — schema sync nested keys + optional deletes
 
 - **Changed:** Nested field sync keys by `parent.identifier`; detect
@@ -40,10 +43,11 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 - **Changed:** Tag **v0.4.2** — ships `sync --type functions` + active-revision
   deploy parity; bump release workflow Go to 1.25.5.
 - **Why:** Publish CLI so consumers can sync Logic functions between projects.
-- **Affected:** all sync_function* modules, `sync.go` / `sync_graphql.go`,
+- **Affected:** all sync_function\* modules, `sync.go` / `sync_graphql.go`,
   `.github/workflows/release.yml`, GoReleaser GitHub release + homebrew-tap.
 
 ---
+
 ## 2026-07-18 — sync --type functions
 
 - **Changed:** Third sync type `functions` — project↔project transfer of Logic
@@ -57,7 +61,9 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
   `.knowledge/features/apito-sync.md`
 
 ---
+
 ## 2026-07-06
+
 - **Changed:** Bootstrapped knowledge system for this repo.
 - **Why:** Cross-LLM durable knowledge + working memory.
 - **Affected:** this repo only.
