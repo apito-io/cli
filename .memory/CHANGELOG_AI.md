@@ -5,6 +5,14 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
 
+## 2026-07-27 — v0.4.9 nested apply order + dependency closure
+
+- **Changed:** `buildSyncTasks` sorts by `fieldPathDepth` (parents before children; deletes deepest-first). Selection closes ancestor field adds. Local `validateSyncModels` preflight. Clearer stage/publish handoff + first-failure path.
+- **Why:** Alphabetical `ParentField` staged `label_id` before `test_label_results` → engine `parent field not found in draft` on Prottoy.
+- **Affected:** `sync_apply.go`, `sync_deps.go`, `sync_validate.go`, `sync_schema.go`, `sync_plan.go`, tests. Release **v0.4.9**.
+
+---
+
 ## 2026-07-23 — false update_field after draft overlay (v0.4.8)
 
 - **Changed:** Treat nil and empty `validation.locals` / fixed-list slices as equal in `validationEqualForSync`.

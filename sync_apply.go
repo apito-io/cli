@@ -64,30 +64,42 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 		return strings.ToLower(modelAdds[i].Model) < strings.ToLower(modelAdds[j].Model)
 	})
 
-	sortFieldChanges := func(list []SchemaChange) {
-		sort.Slice(list, func(i, j int) bool {
+	// Depth-first ancestry: parents before children for adds/updates.
+	// Alphabetical ParentField wrongly stages label_id (parent=test_label_results)
+	// before test_label_results itself (parent=tests).
+	sortFieldChangesByDepth := func(list []SchemaChange, deepestFirst bool) {
+		sort.SliceStable(list, func(i, j int) bool {
 			a, b := list[i], list[j]
 			if !strings.EqualFold(a.Model, b.Model) {
 				return strings.ToLower(a.Model) < strings.ToLower(b.Model)
 			}
-			aParent, bParent := "", ""
+			aDepth, bDepth := 0, 0
 			aSerial, bSerial := 0, 0
+			aKey, bKey := "", ""
 			if a.Field != nil {
-				aParent = a.Field.ParentField
+				aDepth = fieldPathDepth(*a.Field)
 				aSerial = a.Field.Serial
+				aKey = fieldSyncKey(*a.Field)
 			}
 			if b.Field != nil {
-				bParent = b.Field.ParentField
+				bDepth = fieldPathDepth(*b.Field)
 				bSerial = b.Field.Serial
+				bKey = fieldSyncKey(*b.Field)
 			}
-			if aParent != bParent {
-				return aParent < bParent
+			if aDepth != bDepth {
+				if deepestFirst {
+					return aDepth > bDepth
+				}
+				return aDepth < bDepth
 			}
-			return aSerial < bSerial
+			if aSerial != bSerial {
+				return aSerial < bSerial
+			}
+			return aKey < bKey
 		})
 	}
-	sortFieldChanges(fieldChanges)
-	sortFieldChanges(fieldDeletes)
+	sortFieldChangesByDepth(fieldChanges, false)
+	sortFieldChangesByDepth(fieldDeletes, true)
 
 	sort.Slice(connChanges, func(i, j int) bool {
 		a, b := connChanges[i], connChanges[j]
@@ -348,13 +360,20 @@ func printSyncTaskSummary(results []SyncTaskResult) {
 }
 
 func summarizeSyncResults(endpoints SyncEndpoints, results []SyncTaskResult) error {
-	var passed, failed int
-	for _, r := range results {
+	var passed, failed, skipped int
+	var firstFail *SyncTaskResult
+	for i := range results {
+		r := &results[i]
 		switch r.Status {
 		case taskPassed:
 			passed++
 		case taskFailed:
 			failed++
+			if firstFail == nil {
+				firstFail = r
+			}
+		case taskSkipped:
+			skipped++
 		}
 	}
 
@@ -362,6 +381,18 @@ func summarizeSyncResults(endpoints SyncEndpoints, results []SyncTaskResult) err
 		print_success(fmt.Sprintf("Applied %d schema change(s) to %s (%s).", passed, endpoints.ToAccount, endpoints.ToURL))
 	}
 	if failed > 0 {
+		if firstFail != nil {
+			path := ""
+			if firstFail.Task.Change.Field != nil {
+				path = fieldSyncKey(*firstFail.Task.Change.Field)
+			}
+			print_error(fmt.Sprintf(
+				"First failure at %d/%d: %s path=%q — %s",
+				firstFail.Task.Index+1, len(results),
+				formatSchemaChangeShort(firstFail.Task.Change), path, firstFail.Message,
+			))
+			print_status("Safe next: fix ordering/schema, discard empty/corrupt draft in Console if needed, re-sync.")
+		}
 		printPublishReminder()
 		return fmt.Errorf("%d schema task(s) failed on %s (%s)", failed, endpoints.ToAccount, endpoints.ToURL)
 	}

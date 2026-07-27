@@ -12,6 +12,13 @@ func runSchemaSync(fromClient, toClient *SyncGraphQLClient, endpoints SyncEndpoi
 		return fmt.Errorf("source schema (%s): %w", endpoints.FromURL, err)
 	}
 
+	if issues := validateSyncModels(sourceModels); len(issues) > 0 {
+		print_error("Source schema validation failed.")
+		fmt.Println(formatSchemaValidationReport(issues))
+		return fmt.Errorf("source schema has %d validation issue(s); fix schema before sync", len(issues))
+	}
+	print_status("Source schema validation passed.")
+
 	destCtx, err := loadDestinationSchema(toClient)
 	if err != nil {
 		return fmt.Errorf("destination schema (%s): %w", endpoints.ToURL, err)
@@ -88,6 +95,14 @@ func runSchemaSync(fromClient, toClient *SyncGraphQLClient, endpoints SyncEndpoi
 		return nil
 	}
 
+	selected, err = closeFieldDependencies(selected, allChanges)
+	if err != nil {
+		return err
+	}
+	if err := preflightNestedAddOrder(selected); err != nil {
+		return err
+	}
+
 	if _, deletes := partitionSchemaChanges(selected); len(deletes) > 0 {
 		print_warning(fmt.Sprintf(
 			"%d selected change(s) delete fields on the destination (staged until Console publish).",
@@ -118,13 +133,26 @@ func runSchemaSync(fromClient, toClient *SyncGraphQLClient, endpoints SyncEndpoi
 	}
 
 	tasks := buildSyncTasks(selected)
+	if err := preflightNestedAddOrder(selectedFromTasks(tasks)); err != nil {
+		return err
+	}
 	results := runSyncTasks(toClient, endpoints, tasks, srcMap, effectiveModelNames(destCtx.Effective))
 	return summarizeSyncResults(endpoints, results)
 }
 
+func selectedFromTasks(tasks []SyncTask) []SchemaChange {
+	out := make([]SchemaChange, len(tasks))
+	for i, t := range tasks {
+		out[i] = t.Change
+	}
+	return out
+}
+
 func printPublishReminder() {
 	fmt.Println()
-	print_warning("Schema changes are staged as a draft on pro engines.")
-	print_status("Open Apito Console → Project Settings → Schema Changes → review the timeline → Publish manually.")
-	print_status("Public API and physical tables update only after publish.")
+	print_warning("Schema changes are staged as a draft — NOT published yet.")
+	print_status("Review: Apito Console → Project Settings → Schema Changes")
+	print_status("Confirm pending ops match the apply summary, then Publish manually.")
+	print_status("Public API / tables update only after publish. CLI never auto-publishes.")
+	print_status("After publish: re-run apito sync (dry) to confirm zero remaining drift.")
 }

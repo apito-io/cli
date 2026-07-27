@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	survey "github.com/AlecAivazis/survey/v2"
 )
@@ -44,18 +45,20 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		if f.FieldSubType != "" {
 			typeLabel = f.FieldType + "/" + f.FieldSubType
 		}
-		if f.ParentField != "" {
-			return fmt.Sprintf("Add field %q (%s, %s) on %q.%s", f.Label, f.Identifier, typeLabel, ch.Model, f.ParentField)
+		indent := strings.Repeat("  ", fieldPathDepth(*f))
+		path := fieldSyncKey(*f)
+		base := fmt.Sprintf("%sAdd field %q (%s, %s) on %q [%s]", indent, f.Label, f.Identifier, typeLabel, ch.Model, path)
+		if strings.Contains(ch.Summary, "required by") {
+			return base + " [required ancestor]"
 		}
-		return fmt.Sprintf("Add field %q (%s, %s) on %q", f.Label, f.Identifier, typeLabel, ch.Model)
+		return base
 	case ChangeUpdateField:
 		if ch.Field == nil {
 			return ch.Summary
 		}
-		if ch.Field.ParentField != "" {
-			return fmt.Sprintf("Update field %q (%s) on %q.%s", ch.Field.Label, ch.Field.Identifier, ch.Model, ch.Field.ParentField)
-		}
-		return fmt.Sprintf("Update field %q (%s) on %q", ch.Field.Label, ch.Field.Identifier, ch.Model)
+		indent := strings.Repeat("  ", fieldPathDepth(*ch.Field))
+		path := fieldSyncKey(*ch.Field)
+		return fmt.Sprintf("%sUpdate field %q (%s) on %q [%s]", indent, ch.Field.Label, ch.Field.Identifier, ch.Model, path)
 	case ChangeDeleteField:
 		if ch.Field == nil {
 			return ch.Summary
@@ -64,10 +67,9 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		if label == "" {
 			label = ch.Field.Identifier
 		}
-		if ch.Field.ParentField != "" {
-			return fmt.Sprintf("Delete field %q (%s) on %q.%s", label, ch.Field.Identifier, ch.Model, ch.Field.ParentField)
-		}
-		return fmt.Sprintf("Delete field %q (%s) on %q", label, ch.Field.Identifier, ch.Model)
+		indent := strings.Repeat("  ", fieldPathDepth(*ch.Field))
+		path := fieldSyncKey(*ch.Field)
+		return fmt.Sprintf("%sDelete field %q (%s) on %q [%s]", indent, label, ch.Field.Identifier, ch.Model, path)
 	case ChangeAddConnection:
 		if ch.Connection == nil {
 			return ch.Summary
