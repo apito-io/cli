@@ -236,3 +236,21 @@ func TestValidateSyncModels_CleanPasses(t *testing.T) {
 		t.Fatalf("unexpected issues: %s", formatSchemaValidationReport(issues))
 	}
 }
+
+func TestValidateSyncModels_SystemCompositesAllowed(t *testing.T) {
+	models := []SyncModel{{
+		Name: "tenant",
+		Fields: []SyncField{{
+			Identifier: "bio",
+			FieldType:  "multiline",
+			SubFieldInfo: []SyncField{
+				{Identifier: "html", FieldType: "text", ParentField: "bio"},
+				{Identifier: "markdown", FieldType: "text", ParentField: "bio"},
+				{Identifier: "text", FieldType: "text", ParentField: "bio"},
+			},
+		}},
+	}}
+	if issues := validateSyncModels(models); len(issues) != 0 {
+		t.Fatalf("unexpected issues: %s", formatSchemaValidationReport(issues))
+	}
+}

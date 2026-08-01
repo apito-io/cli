@@ -19,7 +19,8 @@ func (i schemaValidationIssue) String() string {
 }
 
 // validateSyncModels checks nested field shapes before diff/apply.
-// Scalar/list/media/date/number/boolean must not carry sub_field_info.
+// Scalar/list/date/number/boolean must not carry sub_field_info.
+// multiline/media/geo are engine system composites and may ship fixed children.
 // Tree-derived parent must match explicit parent_field when set.
 // Duplicate full paths are errors.
 func validateSyncModels(models []SyncModel) []schemaValidationIssue {
@@ -67,7 +68,9 @@ func validateSyncModels(models []SyncModel) []schemaValidationIssue {
 				hasChildren := len(f.SubFieldInfo) > 0
 				switch ft {
 				case "object", "repeated":
-					// containers OK
+					// nested containers OK
+				case "multiline", "media", "geo":
+					// engine system composites ship fixed sub_field_info
 				default:
 					if hasChildren {
 						issues = append(issues, schemaValidationIssue{

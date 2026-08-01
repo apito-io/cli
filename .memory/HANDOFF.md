@@ -2,18 +2,16 @@
 
 ## Branch
 
-- `main` — tag **v0.4.9**
+- `main` — tag **v0.4.10**
 
-## Done (2026-07-27 — v0.4.9)
+## Done (2026-08-01 — v0.4.10)
 
-- Fixed `buildSyncTasks` alphabetical ParentField bug (child-before-parent)
-- `closeFieldDependencies` auto-includes ancestor adds
-- `validateSyncModels` rejects list-with-children + stale parent_field
-- Prottoy-shaped regression tests; schema.json validates clean
+- `validateSyncModels` allows `multiline`/`media`/`geo` with children
+- Test: `TestValidateSyncModels_SystemCompositesAllowed` (`tenant.bio`)
 
 ## Next
 
-- User: rebuild/install CLI, inspect prod draft, re-sync Prottoy, publish in Console
+- Install CLI v0.4.10; sync Rosna after schema heal publish
 
 ## Do not touch
 
@@ -22,4 +20,4 @@
 
 ## Last Updated
 
-2026-07-27
+2026-08-01
