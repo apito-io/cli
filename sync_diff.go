@@ -10,11 +10,12 @@ import (
 type SchemaChangeKind string
 
 const (
-	ChangeAddModel      SchemaChangeKind = "add_model"
-	ChangeAddField      SchemaChangeKind = "add_field"
-	ChangeUpdateField   SchemaChangeKind = "update_field"
-	ChangeDeleteField   SchemaChangeKind = "delete_field"
-	ChangeAddConnection SchemaChangeKind = "add_connection"
+	ChangeAddModel         SchemaChangeKind = "add_model"
+	ChangeAddField         SchemaChangeKind = "add_field"
+	ChangeUpdateField      SchemaChangeKind = "update_field"
+	ChangeDeleteField      SchemaChangeKind = "delete_field"
+	ChangeAddConnection    SchemaChangeKind = "add_connection"
+	ChangeUpdateConnection SchemaChangeKind = "update_connection"
 )
 
 type SchemaChange struct {
@@ -291,12 +292,12 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 			}
 		}
 
-		dstConnKeys := make(map[string]struct{})
+		// Index every dest peer edge by model+known_as (ignore Type). Flipped
+		// forward/backward metadata must not look like a missing relation.
+		dstConnByKey := make(map[string]SyncConnection)
 		if destExists {
 			for _, c := range dst.Connections {
-				if isForwardConnection(c) {
-					dstConnKeys[connectionKey(dst.Name, c)] = struct{}{}
-				}
+				dstConnByKey[connectionKey(dst.Name, c)] = c
 			}
 		}
 		for _, c := range src.Connections {
@@ -304,9 +305,6 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 				continue
 			}
 			key := connectionKey(src.Name, c)
-			if _, ok := dstConnKeys[key]; ok {
-				continue
-			}
 			connCopy := c
 			reverse := findReverseRelationType(srcMap, src.Name, c.Model)
 			forward := c.Relation
@@ -316,6 +314,27 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 			knownAs := c.KnownAs
 			if knownAs == "" {
 				knownAs = c.Model
+			}
+			if destConn, ok := dstConnByKey[key]; ok {
+				destRel := destConn.Relation
+				if destRel == "" {
+					destRel = "has_many"
+				}
+				if isForwardConnection(destConn) && strings.EqualFold(destRel, forward) {
+					continue
+				}
+				changes = append(changes, SchemaChange{
+					ID:          fmt.Sprintf("conn-fix:%s:%s", src.Name, key),
+					Kind:        ChangeUpdateConnection,
+					Model:       src.Name,
+					Connection:  &connCopy,
+					ReverseType: reverse,
+					Summary: fmt.Sprintf(
+						"Fix relation direction %q → %q (%s ↔ %s, known_as: %q) on %q",
+						src.Name, c.Model, forward, reverse, knownAs, src.Name,
+					),
+				})
+				continue
 			}
 			changes = append(changes, SchemaChange{
 				ID:          fmt.Sprintf("conn:%s:%s", src.Name, key),

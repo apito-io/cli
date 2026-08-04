@@ -4,6 +4,15 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-05 — v0.4.11 fix relation direction sync
+
+- **Changed:** `ChangeUpdateConnection` when dest has peer edge with flipped
+  `Type` or different relation; sync still calls `UpsertConnection`.
+- **Why:** Prod edges typed `backward` on owning model looked "missing"; CLI
+  planned phantom Adds that pro staging no-op'd.
+- **Affected:** sync_diff.go, sync_apply.go, sync_plan.go, tests. Tag **v0.4.11**.
+
+---
 
 ## 2026-08-01 — v0.4.10 system composites in sync validate
 

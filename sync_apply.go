@@ -55,7 +55,7 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 			fieldChanges = append(fieldChanges, ch)
 		case ChangeDeleteField:
 			fieldDeletes = append(fieldDeletes, ch)
-		case ChangeAddConnection:
+		case ChangeAddConnection, ChangeUpdateConnection:
 			connChanges = append(connChanges, ch)
 		}
 	}
@@ -135,7 +135,7 @@ func requiredModelsForChange(ch SchemaChange) []string {
 		return nil
 	case ChangeAddField, ChangeUpdateField, ChangeDeleteField:
 		return []string{strings.ToLower(ch.Model)}
-	case ChangeAddConnection:
+	case ChangeAddConnection, ChangeUpdateConnection:
 		if ch.Connection == nil {
 			return []string{strings.ToLower(ch.Model)}
 		}
@@ -212,7 +212,7 @@ func applySyncTask(client *SyncGraphQLClient, task SyncTask, srcMap map[string]S
 			return fmt.Errorf("missing field payload")
 		}
 		return client.DeleteField(ch.Model, *ch.Field)
-	case ChangeAddConnection:
+	case ChangeAddConnection, ChangeUpdateConnection:
 		if ch.Connection == nil {
 			return fmt.Errorf("missing connection payload")
 		}
@@ -322,7 +322,7 @@ func markModelsAvailable(task SyncTask, available map[string]struct{}) {
 		available[strings.ToLower(task.Change.Model)] = struct{}{}
 	case ChangeAddField, ChangeUpdateField:
 		available[strings.ToLower(task.Change.Model)] = struct{}{}
-	case ChangeAddConnection:
+	case ChangeAddConnection, ChangeUpdateConnection:
 		available[strings.ToLower(task.Change.Model)] = struct{}{}
 		if task.Change.Connection != nil {
 			available[strings.ToLower(task.Change.Connection.Model)] = struct{}{}

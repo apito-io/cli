@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFieldsMatchForSync_ValidationNullVsFalse(t *testing.T) {
 	falseVal := false
@@ -473,4 +476,69 @@ func changeSummaries(changes []SchemaChange) []string {
 		out = append(out, ch.Summary)
 	}
 	return out
+}
+
+func TestComputeSchemaDiff_FlippedConnectionPlansFix(t *testing.T) {
+	source := []SyncModel{{
+		Name: "mark_config",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "forward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_config", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "mark_config",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "backward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_config", Relation: "has_one", Type: "forward"},
+		},
+	}}
+	diffs := computeSchemaDiff(source, dest)
+	changes := flattenSchemaChanges(diffs)
+	if len(changes) != 1 {
+		t.Fatalf("changes = %#v, want 1 fix", changes)
+	}
+	if changes[0].Kind != ChangeUpdateConnection {
+		t.Fatalf("kind = %q, want update_connection", changes[0].Kind)
+	}
+	if !strings.Contains(changes[0].Summary, "Fix relation direction") {
+		t.Fatalf("summary = %q", changes[0].Summary)
+	}
+}
+
+func TestComputeSchemaDiff_MatchingForwardConnectionNoChange(t *testing.T) {
+	source := []SyncModel{{
+		Name: "mark_input",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "forward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_input", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "mark_input",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "forward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_input", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 0 {
+		t.Fatalf("expected no changes, got %#v", changes)
+	}
 }
