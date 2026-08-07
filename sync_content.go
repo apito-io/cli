@@ -96,12 +96,22 @@ func runContentSync(fromClient, toClient *SyncGraphQLClient, fromProject, toProj
 	}
 
 	copied := 0
+	var failures []string
 	for _, name := range selectedNames {
-		n, err := copyModelContent(fromClient, toClient, name)
-		if err != nil {
-			return fmt.Errorf("copy model %q: %w", name, err)
-		}
+		// A single bad document must not abandon the remaining models; collect and
+		// report instead so one row cannot strand a 40-model run half applied.
+		n, docErrs, err := copyModelContent(fromClient, toClient, name)
 		copied += n
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("copy model %q: %v", name, err))
+			print_warning(fmt.Sprintf("Copied %d row(s) for model %q, then stopped: %v", n, name, err))
+			continue
+		}
+		if len(docErrs) > 0 {
+			failures = append(failures, docErrs...)
+			print_warning(fmt.Sprintf("Copied %d row(s) for model %q, %d document(s) failed", n, name, len(docErrs)))
+			continue
+		}
 		print_success(fmt.Sprintf("Copied %d row(s) for model %q", n, name))
 	}
 
@@ -111,12 +121,37 @@ func runContentSync(fromClient, toClient *SyncGraphQLClient, fromProject, toProj
 			continue
 		}
 		if err := syncModelRelations(fromClient, toClient, m); err != nil {
-			return fmt.Errorf("relations for %q: %w", name, err)
+			failures = append(failures, fmt.Sprintf("relations for %q: %v", name, err))
+			print_warning(fmt.Sprintf("Relations for %q failed: %v", name, err))
 		}
+	}
+
+	if len(failures) > 0 {
+		printContentSyncFailures(failures)
+		return fmt.Errorf("content sync finished with %d failure(s): %d row(s) copied", len(failures), copied)
 	}
 
 	print_success(fmt.Sprintf("Content sync complete: %d row(s) copied.", copied))
 	return nil
+}
+
+const contentSyncFailureListLimit = 20
+
+func printContentSyncFailures(failures []string) {
+	fmt.Println()
+	fmt.Printf("  FAILURES (%d)\n", len(failures))
+	fmt.Println("  ───────────────────────────────────────────────────────────────")
+	shown := failures
+	if len(shown) > contentSyncFailureListLimit {
+		shown = shown[:contentSyncFailureListLimit]
+	}
+	for i, f := range shown {
+		fmt.Printf("  [%d] %s\n", i+1, f)
+	}
+	if len(failures) > len(shown) {
+		fmt.Printf("  … and %d more\n", len(failures)-len(shown))
+	}
+	fmt.Println()
 }
 
 func filterUserModels(models []SyncModel) []SyncModel {
@@ -191,15 +226,18 @@ func countModelRows(client *SyncGraphQLClient, modelName string) (int, error) {
 	return res.Count, nil
 }
 
-func copyModelContent(fromClient, toClient *SyncGraphQLClient, modelName string) (int, error) {
+// copyModelContent returns the number of copied rows, per-document failures, and a
+// fatal error (source read failure) that stops this model early.
+func copyModelContent(fromClient, toClient *SyncGraphQLClient, modelName string) (int, []string, error) {
 	const pageSize = 50
 	page := 1
 	total := 0
+	var docErrs []string
 
 	for {
 		res, err := fromClient.GetModelData(modelName, page, pageSize)
 		if err != nil {
-			return total, err
+			return total, docErrs, err
 		}
 		if len(res.Results) == 0 {
 			break
@@ -214,7 +252,8 @@ func copyModelContent(fromClient, toClient *SyncGraphQLClient, modelName string)
 				payload = map[string]interface{}{}
 			}
 			if err := toClient.UpsertModelData(modelName, docID, payload, nil); err != nil {
-				return total, fmt.Errorf("upsert %s/%s: %w", modelName, docID, err)
+				docErrs = append(docErrs, fmt.Sprintf("upsert %s/%s: %v", modelName, docID, err))
+				continue
 			}
 			total++
 		}
@@ -223,7 +262,7 @@ func copyModelContent(fromClient, toClient *SyncGraphQLClient, modelName string)
 		}
 		page++
 	}
-	return total, nil
+	return total, docErrs, nil
 }
 
 func syncModelRelations(fromClient, toClient *SyncGraphQLClient, model SyncModel) error {

@@ -4,6 +4,17 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-07 — v0.4.12 content sync survives per-document failures
+
+- **Changed:** `copyModelContent` returns per-document failures instead of
+  aborting the whole run; relation sync failures collected too. Summary block
+  lists up to 20 failures and the command exits non-zero. `syncCmd` sets
+  `SilenceUsage` so the flag dump no longer buries the real error.
+- **Why:** one `document <id> not found` killed a 43-model content sync after
+  copying 0 rows (engine fix: open-core **v1.8.11**).
+- **Affected:** `sync_content.go`, `sync.go`. Tag **v0.4.12**.
+
+---
 ## 2026-08-05 — v0.4.11 fix relation direction sync
 
 - **Changed:** `ChangeUpdateConnection` when dest has peer edge with flipped

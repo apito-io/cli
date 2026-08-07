@@ -82,7 +82,9 @@ var syncCmd = &cobra.Command{
 Uses the system GraphQL API (/system/graphql) with unified apt_ access tokens
 (Authorization: Bearer). Legacy cli-/mcp-/sdk- prefixed keys are retired.
 Schema changes are staged as drafts on pro engines — publish from Console when ready.`,
-	RunE: runSyncCommand,
+	// Sync failures are runtime problems, not bad invocations; the flag dump buries them.
+	SilenceUsage: true,
+	RunE:         runSyncCommand,
 }
 
 func init() {
