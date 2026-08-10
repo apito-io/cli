@@ -542,3 +542,74 @@ func TestComputeSchemaDiff_MatchingForwardConnectionNoChange(t *testing.T) {
 		t.Fatalf("expected no changes, got %#v", changes)
 	}
 }
+
+func multilineMessageField(id string) SyncField {
+	return SyncField{
+		Identifier: id,
+		Label:      id,
+		FieldType:  "multiline",
+		InputType:  "string",
+		SubFieldInfo: []SyncField{
+			{Identifier: "html", FieldType: "text", InputType: "string"},
+			{Identifier: "markdown", FieldType: "text", InputType: "string"},
+			{Identifier: "text", FieldType: "text", InputType: "string"},
+		},
+	}
+}
+
+func TestFlattenModelFields_SkipsEngineCompositeChildren(t *testing.T) {
+	flat := flattenModelFields(SyncModel{
+		Name: "app_release_policy",
+		Fields: []SyncField{
+			{Identifier: "platform", Label: "platform", FieldType: "text"},
+			multilineMessageField("message_en"),
+			multilineMessageField("message_bn"),
+		},
+	})
+	got := make(map[string]bool, len(flat))
+	for _, f := range flat {
+		got[fieldSyncKey(f)] = true
+	}
+	for _, want := range []string{"platform", "message_en", "message_bn"} {
+		if !got[want] {
+			t.Fatalf("missing parent %q in %#v", want, got)
+		}
+	}
+	for _, noise := range []string{
+		"message_en.html", "message_en.markdown", "message_en.text",
+		"message_bn.html", "message_bn.markdown", "message_bn.text",
+	} {
+		if got[noise] {
+			t.Fatalf("engine composite leaf %q must not appear in flatten: %#v", noise, got)
+		}
+	}
+}
+
+func TestComputeSchemaDiff_IgnoresMultilineBuiltinLeaves(t *testing.T) {
+	// Source has full multiline sub_field_info; dest only has the parent —
+	// common when projectModelsInfo omits built-in leaves on one side.
+	source := []SyncModel{{
+		Name: "app_release_policy",
+		Fields: []SyncField{
+			{Identifier: "platform", Label: "platform", FieldType: "text"},
+			multilineMessageField("message_en"),
+			multilineMessageField("message_bn"),
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "app_release_policy",
+		Fields: []SyncField{
+			{Identifier: "platform", Label: "platform", FieldType: "text"},
+			{Identifier: "message_en", Label: "message_en", FieldType: "multiline", InputType: "string"},
+			{Identifier: "message_bn", Label: "message_bn", FieldType: "multiline", InputType: "string"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 0 {
+		t.Fatalf("expected no multiline-leaf noise, got %#v", changes)
+	}
+	del := flattenSchemaChanges(computeSchemaDeleteDiff(source, dest))
+	if len(del) != 0 {
+		t.Fatalf("expected no delete noise for composite leaves, got %#v", del)
+	}
+}

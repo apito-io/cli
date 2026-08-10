@@ -4,6 +4,17 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-11 — skip multiline/media/geo leaves in schema sync
+
+- **Changed:** `flattenModelFields` no longer walks `sub_field_info` under
+  engine composites (`multiline`, `media`, `geo`). Plan text falls back to
+  identifier when label is empty.
+- **Why:** deep nesting (v0.4.7) surfaced fixed `html`/`markdown`/`text`
+  children as fake `Add field ""` when one side omitted built-in leaves
+  (e.g. Rosna `app_release_policy` message_bn/en).
+- **Affected:** `sync_diff.go`, `sync_plan.go`, `sync_diff_test.go`.
+
+---
 ## 2026-08-07 — v0.4.12 content sync survives per-document failures
 
 - **Changed:** `copyModelContent` returns per-document failures instead of

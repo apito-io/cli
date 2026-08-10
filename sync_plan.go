@@ -47,7 +47,11 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		}
 		indent := strings.Repeat("  ", fieldPathDepth(*f))
 		path := fieldSyncKey(*f)
-		base := fmt.Sprintf("%sAdd field %q (%s, %s) on %q [%s]", indent, f.Label, f.Identifier, typeLabel, ch.Model, path)
+		label := f.Label
+		if strings.TrimSpace(label) == "" {
+			label = f.Identifier
+		}
+		base := fmt.Sprintf("%sAdd field %q (%s, %s) on %q [%s]", indent, label, f.Identifier, typeLabel, ch.Model, path)
 		if strings.Contains(ch.Summary, "required by") {
 			return base + " [required ancestor]"
 		}
@@ -56,9 +60,13 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		if ch.Field == nil {
 			return ch.Summary
 		}
+		label := ch.Field.Label
+		if strings.TrimSpace(label) == "" {
+			label = ch.Field.Identifier
+		}
 		indent := strings.Repeat("  ", fieldPathDepth(*ch.Field))
 		path := fieldSyncKey(*ch.Field)
-		return fmt.Sprintf("%sUpdate field %q (%s) on %q [%s]", indent, ch.Field.Label, ch.Field.Identifier, ch.Model, path)
+		return fmt.Sprintf("%sUpdate field %q (%s) on %q [%s]", indent, label, ch.Field.Identifier, ch.Model, path)
 	case ChangeDeleteField:
 		if ch.Field == nil {
 			return ch.Summary

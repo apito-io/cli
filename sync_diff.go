@@ -44,6 +44,19 @@ func projectSyncProfileKey(p SyncProject) string {
 	return "saas-shared"
 }
 
+// isEngineCompositeFieldType reports field types whose sub_field_info is owned by
+// the engine (fixed html/markdown/text for multiline, etc.). Those leaves are not
+// sync-worthy — comparing them produces false add_field noise when one side
+// omits the built-in children from projectModelsInfo.
+func isEngineCompositeFieldType(fieldType string) bool {
+	switch strings.ToLower(strings.TrimSpace(fieldType)) {
+	case "multiline", "media", "geo":
+		return true
+	default:
+		return false
+	}
+}
+
 func flattenModelFields(model SyncModel) []SyncField {
 	out := make([]SyncField, 0, len(model.Fields))
 	var walk func(fields []SyncField, parentID, pathPrefix string)
@@ -60,6 +73,10 @@ func flattenModelFields(model SyncModel) []SyncField {
 			// so equality checks compare this node only.
 			copy.SubFieldInfo = nil
 			out = append(out, copy)
+			// Engine composites: keep the parent in the diff, skip fixed leaves.
+			if isEngineCompositeFieldType(f.FieldType) {
+				continue
+			}
 			if len(f.SubFieldInfo) > 0 {
 				walk(f.SubFieldInfo, f.Identifier, path)
 			}
