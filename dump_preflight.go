@@ -38,7 +38,7 @@ func dumpBlockingPreflight(from, to SyncProject, src, dst dumpPreflightResponse,
 		return fmt.Errorf("destination engine %q does not support portable dump (sqlite and postgresql only)", eng)
 	}
 	if src.SchemaHash != "" && dst.SchemaHash != "" && src.SchemaHash != dst.SchemaHash {
-		return fmt.Errorf("schema hash mismatch — run apito sync --type schema first\n  source:      %s\n  destination: %s", src.SchemaHash, dst.SchemaHash)
+		return fmt.Errorf("schema hash mismatch — stored model/field layout differs even if `apito sync --type schema` reports in sync (dump ignores metadata like is_common_model / multiline leaves).\n  source:      %s\n  destination: %s\nReload local engine and redeploy Studio after a dump hash fix, then re-run sync if a real field still differs", src.SchemaHash, dst.SchemaHash)
 	}
 	if fromKey == "saas-per-tenant" && (destTenant == nil || strings.TrimSpace(destTenant.ID) == "") {
 		return fmt.Errorf("destination tenant must be resolved by domain before dump")

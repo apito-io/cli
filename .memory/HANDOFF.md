@@ -1,9 +1,13 @@
 # CLI — Handoff
 
-- `main` — tag **v0.4.12**
-- Pair with engine **≥v2.4.30** (open-core **v1.8.11**): `upsertModelData` inserts
-  when the supplied `_id` is absent, so `apito sync --type content` can seed an
-  empty destination with id parity.
+## Released
+
+- `main` — tag **v0.4.15** (dump tenant search / enter domain)
+- Pair with engine **≥v2.4.39**
+
+## Uncommitted (not dump)
+
+- Filesystem→schema sync: `sync_schema_fs.go`, routing in `sync.go`, feature doc. Ask before commit.
 
 ## Last Updated
-2026-08-07
+2026-08-13

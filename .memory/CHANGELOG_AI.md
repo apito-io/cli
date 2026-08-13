@@ -4,6 +4,13 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-13 — dump tenant picker (v0.4.15)
+
+- **Changed:** Search tenants or enter domain; one correlator for FROM and TO; print FROM/TO summary. Needs engine **≥v2.4.39** (dump hash).
+- **Why:** SaaS per-tenant dump should pick like a tenant search, not a bare prompt.
+- **Affected:** `dump.go`, `dump_preflight.go`.
+
+---
 ## 2026-08-13 — apito dump (v0.4.14)
 
 - **Changed:** `apito dump` pulls a portable project/tenant DB (Range download, chunked import). Preflight: profile, PortableDump, schema hash, dest tenant by domain. Prints dest system-DB write/skip list. Push to non-local dest needs `--allow-push`.

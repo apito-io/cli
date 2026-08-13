@@ -38,7 +38,7 @@ instance requires --allow-push and a second confirmation.`,
 func init() {
 	dumpCmd.Flags().StringVar(&dumpFromAccount, "from", "", "Source account name")
 	dumpCmd.Flags().StringVar(&dumpToAccount, "to", "", "Destination account name")
-	dumpCmd.Flags().StringVar(&dumpTenantDomain, "tenant-domain", "", "Tenant domain correlator (saas-per-tenant)")
+	dumpCmd.Flags().StringVar(&dumpTenantDomain, "tenant-domain", "", "Skip picker; use this domain on both FROM and TO")
 	dumpCmd.Flags().BoolVar(&dumpDryRun, "dry-run", false, "Run preflight and print the system-DB write list without transferring")
 	dumpCmd.Flags().BoolVar(&dumpYes, "yes", false, "Skip typed confirmation prompts")
 	dumpCmd.Flags().BoolVar(&dumpAllowPush, "allow-push", false, "Allow replacing a non-local destination database")
@@ -180,14 +180,15 @@ func dumpPhysicalLabel(profile string, tenant *SyncTenant) string {
 
 func resolveDumpTenants(fromClient, toClient *SyncGraphQLClient, fromProject, toProject SyncProject) (*SyncTenant, *SyncTenant, error) {
 	domain := strings.TrimSpace(dumpTenantDomain)
+	if domain == "" && dumpYes {
+		return nil, nil, fmt.Errorf("saas-per-tenant dump with --yes requires --tenant-domain")
+	}
 	if domain == "" {
-		prompt := promptui.Prompt{Label: "Tenant domain (correlator across installs)"}
 		var err error
-		domain, err = prompt.Run()
+		domain, err = pickDumpTenantDomain(fromClient, fromProject.ID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("tenant domain cancelled")
+			return nil, nil, err
 		}
-		domain = strings.TrimSpace(domain)
 	}
 	if domain == "" {
 		return nil, nil, fmt.Errorf("tenant domain required for saas-per-tenant dump")
@@ -197,12 +198,113 @@ func resolveDumpTenants(fromClient, toClient *SyncGraphQLClient, fromProject, to
 	if err != nil {
 		return nil, nil, err
 	}
+	printDumpTenantLine("FROM", src)
 	dst, err := lookupDumpTenant(toClient, toProject.ID, domain, "TO")
 	if err != nil {
 		return nil, nil, err
 	}
-	print_check(fmt.Sprintf("FROM tenant %s (%s) → TO tenant %s (%s)", src.Name, src.ID, dst.Name, dst.ID))
+	printDumpTenantLine("TO", dst)
+	printDumpTenantPair(src, dst)
 	return src, dst, nil
+}
+
+func pickDumpTenantDomain(fromClient *SyncGraphQLClient, fromProjectID string) (string, error) {
+	print_step("How do you want to pick the tenant?")
+	modeSel := promptui.Select{
+		Label: "Tenant picker",
+		Items: []string{"Search tenants", "Enter domain"},
+	}
+	_, mode, err := modeSel.Run()
+	if err != nil {
+		return "", fmt.Errorf("tenant picker cancelled")
+	}
+	if mode == "Enter domain" {
+		prompt := promptui.Prompt{Label: "Tenant domain (same correlator on FROM and TO)"}
+		domain, err := prompt.Run()
+		if err != nil {
+			return "", fmt.Errorf("tenant domain cancelled")
+		}
+		return strings.TrimSpace(domain), nil
+	}
+
+	qPrompt := promptui.Prompt{Label: "Search FROM tenants (name or domain; empty lists first page)"}
+	q, err := qPrompt.Run()
+	if err != nil {
+		return "", fmt.Errorf("tenant search cancelled")
+	}
+	rows, err := fromClient.SearchTenants(fromProjectID, strings.TrimSpace(q), 30)
+	if err != nil {
+		return "", fmt.Errorf("search FROM tenants: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", fmt.Errorf("no FROM tenants matched %q", strings.TrimSpace(q))
+	}
+	picked, err := selectDumpTenantRow(rows)
+	if err != nil {
+		return "", err
+	}
+	domain := strings.TrimSpace(picked.Domain)
+	if domain == "" {
+		return "", fmt.Errorf("FROM tenant %s has no domain — enter a domain instead", picked.ID)
+	}
+	return domain, nil
+}
+
+func selectDumpTenantRow(rows []SyncTenant) (SyncTenant, error) {
+	if len(rows) == 1 {
+		return rows[0], nil
+	}
+	labels := make([]string, len(rows))
+	by := make(map[string]SyncTenant, len(rows))
+	for i, t := range rows {
+		label := dumpTenantLabel(t)
+		labels[i] = label
+		by[label] = t
+	}
+	sel := promptui.Select{
+		Label: "Select FROM tenant (domain is reused on TO)",
+		Items: labels,
+		Size:  min(len(labels), 12),
+	}
+	_, picked, err := sel.Run()
+	if err != nil {
+		return SyncTenant{}, fmt.Errorf("tenant selection cancelled")
+	}
+	return by[picked], nil
+}
+
+func dumpTenantLabel(t SyncTenant) string {
+	name := strings.TrimSpace(t.Name)
+	if name == "" {
+		name = "(unnamed)"
+	}
+	dom := strings.TrimSpace(t.Domain)
+	if dom == "" {
+		dom = "(no domain)"
+	}
+	return fmt.Sprintf("%s  domain=%s  (%s)", name, dom, t.ID)
+}
+
+func printDumpTenantLine(side string, t *SyncTenant) {
+	if t == nil {
+		return
+	}
+	print_check(fmt.Sprintf("%s tenant: %s  domain=%s  (%s)", side, t.Name, t.Domain, t.ID))
+}
+
+func printDumpTenantPair(src, dst *SyncTenant) {
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println("  DUMP TENANTS (same domain correlator)")
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	if src != nil {
+		fmt.Printf("  FROM  %s\n        domain: %s\n        id:     %s\n", src.Name, src.Domain, src.ID)
+	}
+	if dst != nil {
+		fmt.Printf("  TO    %s\n        domain: %s\n        id:     %s\n", dst.Name, dst.Domain, dst.ID)
+	}
+	fmt.Println("═══════════════════════════════════════════════════════════════")
+	fmt.Println()
 }
 
 func lookupDumpTenant(client *SyncGraphQLClient, projectID, domain, side string) (*SyncTenant, error) {
