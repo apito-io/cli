@@ -2,8 +2,8 @@
 
 ## Released
 
-- `main` — tag **v0.4.15** (dump tenant search / enter domain)
-- Pair with engine **≥v2.4.39**
+- `main` — tag **v0.4.16** (dump hash algorithm version gate)
+- Pair with engine **≥v2.4.40**
 
 ## Uncommitted (not dump)
 

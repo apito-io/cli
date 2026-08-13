@@ -8,17 +8,18 @@ import (
 )
 
 type dumpPreflightResponse struct {
-	Profile        string `json:"profile"`
-	Engine         string `json:"engine"`
-	PortableDump   bool   `json:"portable_dump"`
-	SchemaHash     string `json:"schema_hash"`
-	SystemEngine   string `json:"system_engine"`
-	ProjectName    string `json:"project_name"`
-	ProjectID      string `json:"project_id"`
-	TargetType     string `json:"target_type"`
-	TargetID       string `json:"target_id"`
-	WritesSystemDB string `json:"writes_to_system_db"`
-	DoesNotWrite   string `json:"does_not_write"`
+	Profile           string `json:"profile"`
+	Engine            string `json:"engine"`
+	PortableDump      bool   `json:"portable_dump"`
+	SchemaHash        string `json:"schema_hash"`
+	SchemaHashVersion int    `json:"schema_hash_version"`
+	SystemEngine      string `json:"system_engine"`
+	ProjectName       string `json:"project_name"`
+	ProjectID         string `json:"project_id"`
+	TargetType        string `json:"target_type"`
+	TargetID          string `json:"target_id"`
+	WritesSystemDB    string `json:"writes_to_system_db"`
+	DoesNotWrite      string `json:"does_not_write"`
 }
 
 func dumpBlockingPreflight(from, to SyncProject, src, dst dumpPreflightResponse, destTenant *SyncTenant) error {
@@ -36,6 +37,9 @@ func dumpBlockingPreflight(from, to SyncProject, src, dst dumpPreflightResponse,
 			eng = "unknown"
 		}
 		return fmt.Errorf("destination engine %q does not support portable dump (sqlite and postgresql only)", eng)
+	}
+	if src.SchemaHashVersion != dst.SchemaHashVersion {
+		return fmt.Errorf("dump hash algorithm mismatch — source engine reports v%d, destination v%d (0 means engine older than v2.4.40).\nBoth instances must run the same dump hasher; rebuild local engine and redeploy Studio with ENGINE_REF matching the new engine tag.\n`apito sync --type schema` being in sync does not mean dump hashes match until both engines are upgraded", src.SchemaHashVersion, dst.SchemaHashVersion)
 	}
 	if src.SchemaHash != "" && dst.SchemaHash != "" && src.SchemaHash != dst.SchemaHash {
 		return fmt.Errorf("schema hash mismatch — stored model/field layout differs even if `apito sync --type schema` reports in sync (dump ignores metadata like is_common_model / multiline leaves).\n  source:      %s\n  destination: %s\nReload local engine and redeploy Studio after a dump hash fix, then re-run sync if a real field still differs", src.SchemaHash, dst.SchemaHash)

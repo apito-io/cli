@@ -38,6 +38,12 @@ func TestDumpBlockingPreflight(t *testing.T) {
 		t.Fatal("expected schema hash mismatch")
 	}
 	dst.SchemaHash = "abc"
+	src.SchemaHashVersion = 3
+	dst.SchemaHashVersion = 0
+	if err := dumpBlockingPreflight(from, to, src, dst, nil); err == nil {
+		t.Fatal("expected hash algorithm mismatch")
+	}
+	dst.SchemaHashVersion = 3
 	dst.PortableDump = false
 	if err := dumpBlockingPreflight(from, to, src, dst, nil); err == nil {
 		t.Fatal("expected portable dump refusal")

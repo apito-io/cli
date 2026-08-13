@@ -4,6 +4,13 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-13 — dump hash version gate (v0.4.16)
+
+- **Changed:** Preflight reads `schema_hash_version`; fail with an algorithm-mismatch error when source/dest engines disagree (0 = older than v2.4.40).
+- **Why:** Remote Studio still on v2.4.38 hasher while local is v2.4.39+ looks like a schema mismatch even when GraphQL sync is clean.
+- **Affected:** `dump_preflight.go`. Needs engine **≥v2.4.40** on both sides.
+
+---
 ## 2026-08-13 — dump tenant picker (v0.4.15)
 
 - **Changed:** Search tenants or enter domain; one correlator for FROM and TO; print FROM/TO summary. Needs engine **≥v2.4.39** (dump hash).
