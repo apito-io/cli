@@ -670,6 +670,64 @@ func (c *SyncGraphQLClient) GetTenants() ([]SyncTenant, error) {
 	return out.GetTenants.Tenants, nil
 }
 
+func (c *SyncGraphQLClient) SearchTenantsByDomain(projectID, domain string) (*SyncTenant, error) {
+	const query = `
+		query SearchTenantsByDomain($project_id: String!, $domain: String!) {
+			searchTenantsByDomain(project_id: $project_id, domain: $domain) {
+				tenant {
+					id
+					name
+					domain
+				}
+			}
+		}
+	`
+	var out struct {
+		SearchTenantsByDomain struct {
+			Tenant *SyncTenant `json:"tenant"`
+		} `json:"searchTenantsByDomain"`
+	}
+	err := c.execute(query, map[string]interface{}{
+		"project_id": strings.TrimSpace(projectID),
+		"domain":     strings.TrimSpace(domain),
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out.SearchTenantsByDomain.Tenant, nil
+}
+
+func (c *SyncGraphQLClient) SearchTenants(projectID, q string, limit int) ([]SyncTenant, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	const query = `
+		query SearchTenants($project_id: String!, $q: String, $limit: Int) {
+			searchTenants(project_id: $project_id, q: $q, limit: $limit, status: "all") {
+				tenants {
+					id
+					name
+					domain
+				}
+			}
+		}
+	`
+	var out struct {
+		SearchTenants struct {
+			Tenants []SyncTenant `json:"tenants"`
+		} `json:"searchTenants"`
+	}
+	err := c.execute(query, map[string]interface{}{
+		"project_id": strings.TrimSpace(projectID),
+		"q":          strings.TrimSpace(q),
+		"limit":      limit,
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out.SearchTenants.Tenants, nil
+}
+
 func (c *SyncGraphQLClient) SchemaVersioningStatus() (*SchemaVersioningStatus, error) {
 	const query = `
 		query SchemaVersioningStatus {

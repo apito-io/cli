@@ -4,6 +4,26 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-08-13 — apito dump (v0.4.14)
+
+- **Changed:** `apito dump` pulls a portable project/tenant DB (Range download, chunked import). Preflight: profile, PortableDump, schema hash, dest tenant by domain. Prints dest system-DB write/skip list. Push to non-local dest needs `--allow-push`.
+- **Why:** Replace a whole physical DB across installs without copying the instance system file.
+- **Affected:** `dump.go`, `dump_transport.go`, `dump_preflight.go`, `sync_graphql.go` (`SearchTenantsByDomain`). Needs engine **≥v2.4.38**.
+
+---
+## 2026-08-12 — filesystem → project schema sync (Blueprints)
+
+- **Changed:** `apito sync --from filesystem --type schema --dir <blueprint>`
+  loads portable `schema.json` (+ optional `config.yml`), rejects secrets,
+  sanitizes `system_*` / stale `parent_field`, reuses draft staging apply.
+  Export via `--to filesystem`. Feature doc updated.
+- **Why:** Ship Apito Blueprints without a second importer; Console remains
+  publish gate.
+- **Affected:** `sync.go`, `sync_schema.go`, `sync_schema_fs.go`,
+  `sync_schema_merge.go`, `.knowledge/features/apito-sync.md`. Uncommitted
+  pending separate ask (website-astro-only turn).
+
+---
 ## 2026-08-11 — skip multiline/media/geo leaves in schema sync
 
 - **Changed:** `flattenModelFields` no longer walks `sub_field_info` under
