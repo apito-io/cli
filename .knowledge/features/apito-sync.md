@@ -11,7 +11,7 @@ timestamp: 2026-07-16T00:00:00Z
 
 ## Purpose
 
-`apito sync` copies **schema** (models, fields, relations), **functions** (Logic function draft source + metadata), or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. On pro engines, schema applies as **drafts** — publish from Console.
+`apito sync` copies **schema** (models, fields, relations), **functions** (Logic function draft source + metadata), or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. On pro engines, schema applies as **drafts** — publish from Console. **CLI never publishes schema.**
 
 ## Flows
 
@@ -19,9 +19,33 @@ timestamp: 2026-07-16T00:00:00Z
 - **Run**: interactive order is **FROM account → FROM project → TO account → TO project**, then sync type (`schema` → `functions` → `content`). Flags: `--from` / `--to` / `--type`.
 - Project picker lists all `listProjects` memberships; after pick, sync validates the token can resolve that project via `currentProject`.
 - **Schema path**: introspect → diff (`sync_diff.go`) → plan → apply (`sync_apply.go`, merge helpers).
+- **Filesystem schema** (`--from filesystem --type schema --dir <blueprint>`): load portable `schema.json` (+ optional `config.yml`), reject secrets, sanitize engine-owned fields, reuse the same diff/apply/draft staging path. Export with `--to filesystem`.
 - **Functions path**: `projectFunctionsInfo` (incl. `active_revision_hash`) → diff by name (`sync_function_diff.go`: add/update/deploy) → multiselect → upsert and/or `deployFunctionToProject`. Orchestration in `sync_functions.go`.
-- **Content path**: model selection → paginated copy with relation awareness (`sync_content.go`).
+- **Content path**: model selection → paginated copy with relation awareness (`sync_content.go`). Content is **not** supported from filesystem — use an SDK seed script after Console publish.
 - **Dry run**: `--dry-run` shows plan; `--yes` skips confirmations.
+
+## Filesystem schema (Blueprints)
+
+```bash
+apito sync --from filesystem --to <account> --type schema --dir ./blueprints/newspaper-cms --dry-run
+apito sync --from filesystem --to <account> --type schema --dir ./blueprints/newspaper-cms --yes
+```
+
+Layout:
+
+```text
+{dir}/
+  schema.json   # { "models": [...] } OR { "id","name","schema":{"models":[...]} }
+  config.yml    # optional: name, project_type, tenant_model, per_tenant_separate_database
+```
+
+**Rejected** in portable Blueprints: `tokens`, `api_keys`, `project_secret_key`, org IDs, database credentials, and similar secret/credential keys.
+
+**Sanitized** before sync: `system_*` fields, repeated-row `_id` leaves.
+
+**Profile check:** when `config.yml` is present, `project_type` (+ per-tenant DB flag) must match the destination project profile (`general` / `saas-shared` / `saas-per-tenant`).
+
+Default dir when `--dir` omitted: `~/.apito/temp/schema`.
 
 ## Functions sync
 
@@ -57,10 +81,10 @@ Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/t
 
 ## Main files
 
-- `sync.go`, `sync_graphql.go`, `sync_schema.go`, `sync_schema_merge.go`
+- `sync.go`, `sync_graphql.go`, `sync_schema.go`, `sync_schema_merge.go`, `sync_schema_fs.go`
 - `sync_diff.go`, `sync_apply.go`, `sync_content.go`, `sync_plan.go`
 - Functions: `sync_functions.go`, `sync_function_fs.go`, `sync_function_diff.go`
-- Tests: `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_select_test.go`, `sync_functions_test.go`
+- Tests: `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_schema_fs_test.go`, `sync_select_test.go`, `sync_functions_test.go`
 
 ## Dependencies
 
@@ -83,7 +107,7 @@ Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/t
 
 ## Tests
 
-- `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_functions_test.go` (diff kinds + local fs round-trip)
+- `sync_diff_test.go`, `sync_apply_test.go`, `sync_schema_merge_test.go`, `sync_schema_fs_test.go` (Blueprint parse/sanitize/secret reject + sample-blog load), `sync_functions_test.go` (diff kinds + local fs round-trip)
 
 ## Related
 
