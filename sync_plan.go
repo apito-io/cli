@@ -35,7 +35,12 @@ func flattenSchemaChanges(diffs []ModelSchemaDiff) []SchemaChange {
 func formatSchemaChangeDetail(ch SchemaChange) string {
 	switch ch.Kind {
 	case ChangeAddModel:
+		if ch.IsCommonModel {
+			return fmt.Sprintf("Add common model %q", ch.Model)
+		}
 		return fmt.Sprintf("Add model %q", ch.Model)
+	case ChangeUpdateModel:
+		return fmt.Sprintf("Set is_common_model=%v on %q", ch.IsCommonModel, ch.Model)
 	case ChangeAddField:
 		if ch.Field == nil {
 			return ch.Summary
@@ -162,7 +167,12 @@ func (d *destSchemaContext) hasDraftComparison() bool {
 func formatSchemaChangeShort(ch SchemaChange) string {
 	switch ch.Kind {
 	case ChangeAddModel:
+		if ch.IsCommonModel {
+			return fmt.Sprintf("%s — add common model", ch.Model)
+		}
 		return fmt.Sprintf("%s — add model", ch.Model)
+	case ChangeUpdateModel:
+		return fmt.Sprintf("%s — set is_common_model=%v", ch.Model, ch.IsCommonModel)
 	case ChangeAddField:
 		if ch.Field == nil {
 			return ch.Summary
@@ -213,12 +223,39 @@ func printApplyConfirmationBlock(endpoints SyncEndpoints, changes []SchemaChange
 	fmt.Printf("  Account:  %s\n", endpoints.ToAccount)
 	fmt.Printf("  URL:      %s\n", endpoints.ToURL)
 	fmt.Printf("  Project:  %s (%s)\n", endpoints.ToProject.Name, endpoints.ToProject.ID)
-	fmt.Printf("  Mode:     staged as draft on pro (%d change(s))\n", len(changes))
+	fmt.Printf("  Mode:     %s (%d change(s))\n", applyModeLabel(changes), len(changes))
 	fmt.Println()
 	for i, ch := range changes {
 		fmt.Printf("    • [%d] %s\n", i+1, formatSchemaChangeDetail(ch))
 	}
 	fmt.Println()
+}
+
+// applyModeLabel reflects engine behavior: is_common_model updates apply live;
+// other schema ops stage a draft on pro until Console publish.
+func applyModeLabel(changes []SchemaChange) string {
+	draft, immediate := 0, 0
+	for _, ch := range changes {
+		if schemaChangeAppliesImmediately(ch) {
+			immediate++
+		} else {
+			draft++
+		}
+	}
+	switch {
+	case draft > 0 && immediate > 0:
+		return fmt.Sprintf("mixed: %d staged draft + %d apply immediately", draft, immediate)
+	case immediate > 0:
+		return "apply immediately (metadata; no draft)"
+	default:
+		return "staged as draft on pro"
+	}
+}
+
+func schemaChangeAppliesImmediately(ch SchemaChange) bool {
+	// Engine UpdateModelResolverFn short-circuits when is_common_model is set —
+	// metadata Ext patch, no schema draft / publish.
+	return ch.Kind == ChangeUpdateModel
 }
 
 type schemaDiffScope int

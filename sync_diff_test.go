@@ -5,6 +5,65 @@ import (
 	"testing"
 )
 
+func TestComputeSchemaDiff_CommonModelFlag(t *testing.T) {
+	source := []SyncModel{{
+		Name:          "app_release_policy",
+		IsCommonModel: true,
+		Fields: []SyncField{{
+			Identifier: "platform",
+			FieldType:  "text",
+		}},
+	}}
+	dest := []SyncModel{}
+
+	add := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	var found *SchemaChange
+	for i := range add {
+		if add[i].Kind == ChangeAddModel && add[i].Model == "app_release_policy" {
+			found = &add[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected add_model for app_release_policy")
+	}
+	if !found.IsCommonModel {
+		t.Fatal("expected IsCommonModel=true on add_model change")
+	}
+	if !strings.Contains(found.Summary, "common") {
+		t.Fatalf("summary %q should mention common", found.Summary)
+	}
+
+	// Dest has model but not marked common → update_model.
+	dest = []SyncModel{{
+		Name:          "app_release_policy",
+		IsCommonModel: false,
+		Fields: []SyncField{{
+			Identifier: "platform",
+			FieldType:  "text",
+		}},
+	}}
+	upd := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	found = nil
+	for i := range upd {
+		if upd[i].Kind == ChangeUpdateModel {
+			found = &upd[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected update_model when common flag drifts")
+	}
+	if !found.IsCommonModel {
+		t.Fatal("expected IsCommonModel=true on update_model")
+	}
+
+	tasks := buildSyncTasks(upd)
+	if len(tasks) == 0 || tasks[0].Change.Kind != ChangeUpdateModel {
+		t.Fatalf("update_model should run before field work, got %#v", tasks)
+	}
+}
+
 func TestFieldsMatchForSync_ValidationNullVsFalse(t *testing.T) {
 	falseVal := false
 	src := SyncField{

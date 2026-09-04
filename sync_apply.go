@@ -46,11 +46,13 @@ func taskStatusIcon(status taskStatus) string {
 }
 
 func buildSyncTasks(changes []SchemaChange) []SyncTask {
-	var modelAdds, fieldChanges, fieldDeletes, connChanges []SchemaChange
+	var modelAdds, modelUpdates, fieldChanges, fieldDeletes, connChanges []SchemaChange
 	for _, ch := range changes {
 		switch ch.Kind {
 		case ChangeAddModel:
 			modelAdds = append(modelAdds, ch)
+		case ChangeUpdateModel:
+			modelUpdates = append(modelUpdates, ch)
 		case ChangeAddField, ChangeUpdateField:
 			fieldChanges = append(fieldChanges, ch)
 		case ChangeDeleteField:
@@ -62,6 +64,9 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 
 	sort.Slice(modelAdds, func(i, j int) bool {
 		return strings.ToLower(modelAdds[i].Model) < strings.ToLower(modelAdds[j].Model)
+	})
+	sort.Slice(modelUpdates, func(i, j int) bool {
+		return strings.ToLower(modelUpdates[i].Model) < strings.ToLower(modelUpdates[j].Model)
 	})
 
 	// Depth-first ancestry: parents before children for adds/updates.
@@ -117,7 +122,9 @@ func buildSyncTasks(changes []SchemaChange) []SyncTask {
 	})
 
 	// Deletes last: additive work first, then remove destination-only fields.
-	ordered := append(append(append(modelAdds, fieldChanges...), connChanges...), fieldDeletes...)
+	// Common-flag updates sit after creates so a re-synced model can be classified
+	// before field work when both appear in one plan (unlikely but safe).
+	ordered := append(append(append(append(modelAdds, modelUpdates...), fieldChanges...), connChanges...), fieldDeletes...)
 	tasks := make([]SyncTask, len(ordered))
 	for i, ch := range ordered {
 		tasks[i] = SyncTask{
@@ -133,6 +140,8 @@ func requiredModelsForChange(ch SchemaChange) []string {
 	switch ch.Kind {
 	case ChangeAddModel:
 		return nil
+	case ChangeUpdateModel:
+		return []string{strings.ToLower(ch.Model)}
 	case ChangeAddField, ChangeUpdateField, ChangeDeleteField:
 		return []string{strings.ToLower(ch.Model)}
 	case ChangeAddConnection, ChangeUpdateConnection:
@@ -201,7 +210,9 @@ func applySyncTask(client *SyncGraphQLClient, task SyncTask, srcMap map[string]S
 	switch ch.Kind {
 	case ChangeAddModel:
 		src := srcMap[strings.ToLower(ch.Model)]
-		return client.AddModel(ch.Model, src.SinglePage)
+		return client.AddModel(ch.Model, src.SinglePage, ch.IsCommonModel || src.IsCommonModel)
+	case ChangeUpdateModel:
+		return client.UpdateModelCommon(ch.Model, ch.IsCommonModel)
 	case ChangeAddField, ChangeUpdateField:
 		if ch.Field == nil {
 			return fmt.Errorf("missing field payload")
@@ -393,13 +404,13 @@ func summarizeSyncResults(endpoints SyncEndpoints, results []SyncTaskResult) err
 			))
 			print_status("Safe next: fix ordering/schema, discard empty/corrupt draft in Console if needed, re-sync.")
 		}
-		printPublishReminder()
+		printPostApplyReminder(results)
 		return fmt.Errorf("%d schema task(s) failed on %s (%s)", failed, endpoints.ToAccount, endpoints.ToURL)
 	}
 	if passed == 0 {
 		print_warning("No schema changes were applied.")
 		return nil
 	}
-	printPublishReminder()
+	printPostApplyReminder(results)
 	return nil
 }

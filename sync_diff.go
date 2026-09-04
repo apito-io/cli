@@ -11,6 +11,7 @@ type SchemaChangeKind string
 
 const (
 	ChangeAddModel         SchemaChangeKind = "add_model"
+	ChangeUpdateModel      SchemaChangeKind = "update_model"
 	ChangeAddField         SchemaChangeKind = "add_field"
 	ChangeUpdateField      SchemaChangeKind = "update_field"
 	ChangeDeleteField      SchemaChangeKind = "delete_field"
@@ -19,13 +20,14 @@ const (
 )
 
 type SchemaChange struct {
-	ID          string
-	Kind        SchemaChangeKind
-	Model       string
-	Field       *SyncField
-	Connection  *SyncConnection
-	ReverseType string
-	Summary     string
+	ID            string
+	Kind          SchemaChangeKind
+	Model         string
+	Field         *SyncField
+	Connection    *SyncConnection
+	ReverseType   string
+	IsCommonModel bool // desired SaaS common flag (add_model / update_model)
+	Summary       string
 }
 
 type ModelSchemaDiff struct {
@@ -262,11 +264,25 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 		var changes []SchemaChange
 
 		if !destExists {
+			summary := fmt.Sprintf("Add model %q", src.Name)
+			if src.IsCommonModel {
+				summary = fmt.Sprintf("Add common model %q", src.Name)
+			}
 			changes = append(changes, SchemaChange{
-				ID:      fmt.Sprintf("model:%s", src.Name),
-				Kind:    ChangeAddModel,
-				Model:   src.Name,
-				Summary: fmt.Sprintf("Add model %q", src.Name),
+				ID:            fmt.Sprintf("model:%s", src.Name),
+				Kind:          ChangeAddModel,
+				Model:         src.Name,
+				IsCommonModel: src.IsCommonModel,
+				Summary:       summary,
+			})
+		} else if src.IsCommonModel != dst.IsCommonModel {
+			summary := fmt.Sprintf("Set is_common_model=%v on %q", src.IsCommonModel, src.Name)
+			changes = append(changes, SchemaChange{
+				ID:            fmt.Sprintf("model-common:%s", src.Name),
+				Kind:          ChangeUpdateModel,
+				Model:         src.Name,
+				IsCommonModel: src.IsCommonModel,
+				Summary:       summary,
 			})
 		}
 

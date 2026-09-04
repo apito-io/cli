@@ -48,10 +48,15 @@ func parseModelsFromSchemaJSON(raw string) ([]SyncModel, error) {
 	if raw == "" || raw == "{}" || raw == "null" {
 		return nil, nil
 	}
+	// Prefer the Blueprint-aware parser (engine preview + wrapped exports).
+	models, err := parseSchemaBlueprintJSON([]byte(raw))
+	if err == nil {
+		return models, nil
+	}
 	var payload struct {
 		Models []SyncModel `json:"models"`
 	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+	if err2 := json.Unmarshal([]byte(raw), &payload); err2 != nil {
 		return nil, err
 	}
 	return payload.Models, nil
@@ -103,6 +108,10 @@ func mergeSyncModel(live, draft SyncModel) SyncModel {
 	out := live
 	if draft.SinglePage {
 		out.SinglePage = draft.SinglePage
+	}
+	// Draft wins when it marks a model common (schema sync staging).
+	if draft.IsCommonModel {
+		out.IsCommonModel = true
 	}
 	out.Fields = mergeSyncFields(live.Fields, draft.Fields)
 	out.Connections = mergeModelConnections(out.Name, live.Connections, draft.Connections)

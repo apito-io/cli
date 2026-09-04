@@ -74,10 +74,11 @@ type SyncConnection struct {
 }
 
 type SyncModel struct {
-	Name        string           `json:"name"`
-	SinglePage  bool             `json:"single_page"`
-	Fields      []SyncField      `json:"fields"`
-	Connections []SyncConnection `json:"connections"`
+	Name          string           `json:"name"`
+	SinglePage    bool             `json:"single_page"`
+	IsCommonModel bool             `json:"is_common_model"`
+	Fields        []SyncField      `json:"fields"`
+	Connections   []SyncConnection `json:"connections"`
 }
 
 type SyncDocument struct {
@@ -360,6 +361,7 @@ func (c *SyncGraphQLClient) ProjectModelsInfo(modelName string) ([]SyncModel, er
 			projectModelsInfo(model_name: $model_name) {
 				name
 				single_page
+				is_common_model
 				fields {
 					%s
 					sub_field_info {
@@ -400,20 +402,43 @@ func (c *SyncGraphQLClient) ProjectModelsInfo(modelName string) ([]SyncModel, er
 	return out.ProjectModelsInfo, nil
 }
 
-func (c *SyncGraphQLClient) AddModel(name string, singleRecord bool) error {
+func (c *SyncGraphQLClient) AddModel(name string, singleRecord bool, isCommonModel bool) error {
 	const mutation = `
-		mutation AddModel($name: String!, $single_record: Boolean) {
-			addModelToProject(name: $name, single_record: $single_record) {
+		mutation AddModel($name: String!, $single_record: Boolean, $is_common_model: Boolean) {
+			addModelToProject(name: $name, single_record: $single_record, is_common_model: $is_common_model) {
 				name
+				is_common_model
 			}
 		}
 	`
 	var out struct {
 		AddModelToProject []SyncModel `json:"addModelToProject"`
 	}
+	vars := map[string]interface{}{
+		"name":            name,
+		"single_record":   singleRecord,
+		"is_common_model": isCommonModel,
+	}
+	return c.execute(mutation, vars, &out)
+}
+
+// UpdateModelCommon stages/applies SaaS common-model classification via updateModel.
+func (c *SyncGraphQLClient) UpdateModelCommon(modelName string, isCommonModel bool) error {
+	const mutation = `
+		mutation UpdateModelCommon($type: UpdateModelTypeEnum!, $model_name: String!, $is_common_model: Boolean) {
+			updateModel(type: $type, model_name: $model_name, is_common_model: $is_common_model) {
+				name
+				is_common_model
+			}
+		}
+	`
+	var out struct {
+		UpdateModel SyncModel `json:"updateModel"`
+	}
 	return c.execute(mutation, map[string]interface{}{
-		"name":          name,
-		"single_record": singleRecord,
+		"type":            "update",
+		"model_name":      modelName,
+		"is_common_model": isCommonModel,
 	}, &out)
 }
 

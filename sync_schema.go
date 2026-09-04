@@ -11,7 +11,11 @@ func runSchemaSync(fromClient, toClient *SyncGraphQLClient, endpoints SyncEndpoi
 	if err != nil {
 		return fmt.Errorf("source schema (%s): %w", endpoints.FromURL, err)
 	}
+	return runSchemaSyncFromModels(sourceModels, toClient, endpoints, dryRun, autoYes, includeDeletes)
+}
 
+// runSchemaSyncFromModels diffs/applies a preloaded source model list (remote or filesystem Blueprint).
+func runSchemaSyncFromModels(sourceModels []SyncModel, toClient *SyncGraphQLClient, endpoints SyncEndpoints, dryRun, autoYes, includeDeletes bool) error {
 	if issues := validateSyncModels(sourceModels); len(issues) > 0 {
 		print_error("Source schema validation failed.")
 		fmt.Println(formatSchemaValidationReport(issues))
@@ -19,6 +23,7 @@ func runSchemaSync(fromClient, toClient *SyncGraphQLClient, endpoints SyncEndpoi
 	}
 	print_status("Source schema validation passed.")
 
+	print_step("Loading destination schema...")
 	destCtx, err := loadDestinationSchema(toClient)
 	if err != nil {
 		return fmt.Errorf("destination schema (%s): %w", endpoints.ToURL, err)
@@ -155,4 +160,34 @@ func printPublishReminder() {
 	print_status("Confirm pending ops match the apply summary, then Publish manually.")
 	print_status("Public API / tables update only after publish. CLI never auto-publishes.")
 	print_status("After publish: re-run apito sync (dry) to confirm zero remaining drift.")
+}
+
+func printImmediateApplyReminder() {
+	fmt.Println()
+	print_status("is_common_model update applied immediately (no schema draft / publish).")
+	print_status("Console → Schema Changes may stay empty — that is expected for this metadata op.")
+	print_status("Re-run apito sync (dry) to confirm zero remaining drift.")
+}
+
+func printPostApplyReminder(results []SyncTaskResult) {
+	draft, immediate := 0, 0
+	for _, r := range results {
+		if r.Status != taskPassed {
+			continue
+		}
+		if schemaChangeAppliesImmediately(r.Task.Change) {
+			immediate++
+		} else {
+			draft++
+		}
+	}
+	switch {
+	case draft > 0 && immediate > 0:
+		printImmediateApplyReminder()
+		printPublishReminder()
+	case immediate > 0:
+		printImmediateApplyReminder()
+	case draft > 0:
+		printPublishReminder()
+	}
 }

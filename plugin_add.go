@@ -1,54 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
-const (
-	pluginRegistryURL = "https://raw.githubusercontent.com/apito-io/plugins/main/plugins.json"
-	githubAPIBase     = "https://api.github.com"
-	noReleaseMessage  = `No plugin release found for this repository.
-This is not a valid plugin repository.
-Follow the plugin deployment docs at https://apito.io/docs/plugin-deploy-docs for more information.`
-)
-
-// PluginRegistryResponse matches the JSON at plugins.json
-type PluginRegistryResponse struct {
-	Plugins []PluginRegistryEntry `json:"plugins"`
-}
-
-// PluginRegistryEntry represents a single plugin in the registry
-type PluginRegistryEntry struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	GitHubURL string `json:"github_url"`
-}
-
-// pluginGitHubRelease represents the GitHub /releases/latest API response for plugins
-type pluginGitHubRelease struct {
-	TagName string                 `json:"tag_name"`
-	Assets  []pluginGitHubAsset     `json:"assets"`
-}
-
-// pluginGitHubAsset represents a release asset
-type pluginGitHubAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
 var pluginAddCmd = &cobra.Command{
-	Use:   "add <plugin-name-or-github-url>",
-	Short: "Add a plugin from the official registry or a GitHub repository",
-	Long:  `Add a plugin by name (from the official registry) or by GitHub URL. Downloads the latest release and deploys it.`,
+	Use:   "add <plugin-id-or-github-url>",
+	Short: "Install a plugin through the Engine signed-registry installer",
+	Long:  `Resolves a plugin id and calls Engine POST /system/plugin/install. Engine verifies catalog signature, checksum, and config.yml. Super-admin / plugins.deploy required.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		accountName, _ := cmd.Flags().GetString("account")
@@ -58,42 +26,14 @@ var pluginAddCmd = &cobra.Command{
 				return
 			}
 		}
-		forceReplace, _ := cmd.Flags().GetBool("replace")
-		addPlugin(args[0], accountName, forceReplace)
+		addPlugin(args[0], accountName)
 	},
 }
 
 func init() {
-	pluginAddCmd.Flags().StringP("account", "a", "", "Account to use for deployment")
-	pluginAddCmd.Flags().Bool("replace", false, "Delete existing plugin before deployment")
+	pluginAddCmd.Flags().StringP("account", "a", "", "Account to use for installation")
 }
 
-func fetchPluginRegistry() (*PluginRegistryResponse, error) {
-	resp, err := http.Get(pluginRegistryURL)
-	if err != nil {
-		return nil, fmt.Errorf("fetch registry: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
-	}
-	var reg PluginRegistryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&reg); err != nil {
-		return nil, fmt.Errorf("parse registry: %w", err)
-	}
-	return &reg, nil
-}
-
-func findPluginInRegistry(reg *PluginRegistryResponse, id string) *PluginRegistryEntry {
-	for i := range reg.Plugins {
-		if reg.Plugins[i].ID == id {
-			return &reg.Plugins[i]
-		}
-	}
-	return nil
-}
-
-// githubURLPattern matches https://github.com/owner/repo and variants with .git
 var githubURLPattern = regexp.MustCompile(`(?i)^https?://(?:www\.)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$`)
 
 func parseGitHubOwnerRepo(url string) (owner, repo string, ok bool) {
@@ -104,137 +44,58 @@ func parseGitHubOwnerRepo(url string) (owner, repo string, ok bool) {
 	return "", "", false
 }
 
-func fetchLatestRelease(owner, repo string) (*pluginGitHubRelease, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", githubAPIBase, owner, repo)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+func addPlugin(pluginNameOrURL, accountName string) {
+	print_step("🔌 Add Plugin")
+	if !checkServerConfig(accountName) {
+		return
 	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := http.DefaultClient.Do(req)
+	account, err := getAccountConfig(accountName)
 	if err != nil {
-		return nil, fmt.Errorf("fetch release: %w", err)
+		print_error("Failed to get account configuration: " + err.Error())
+		return
+	}
+
+	pluginID := pluginNameOrURL
+	if _, repo, ok := parseGitHubOwnerRepo(pluginNameOrURL); ok {
+		pluginID = repo
+	}
+
+	body, _ := json.Marshal(map[string]string{"id": pluginID})
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(account.ServerURL, "/")+"/system/plugin/install", bytes.NewReader(body))
+	if err != nil {
+		print_error(err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	req.Header.Set("X-Use-Cookies", "false")
+	req.Header.Set("Content-Type", "application/json")
+
+	print_status(fmt.Sprintf("Installing %s via Engine %s", pluginID, account.ServerURL))
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		print_error("Failed to connect to server: " + err.Error())
+		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+	raw, _ := io.ReadAll(resp.Body)
+	var parsed struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		Code    string `json:"code"`
+		Error   string `json:"error"`
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-	var rel pluginGitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("parse release: %w", err)
-	}
-	return &rel, nil
-}
-
-func findPlatformAsset(release *pluginGitHubRelease, pluginName string) *pluginGitHubAsset {
-	suffix := "-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
-	prefix := pluginName + "-"
-	for i := range release.Assets {
-		a := &release.Assets[i]
-		if strings.HasPrefix(a.Name, prefix) && strings.HasSuffix(a.Name, suffix) {
-			return a
+	_ = json.Unmarshal(raw, &parsed)
+	if resp.StatusCode >= 300 || !parsed.Success {
+		msg := parsed.Message
+		if msg == "" {
+			msg = string(raw)
 		}
-	}
-	return nil
-}
-
-func downloadAndExtractPlugin(downloadURL, pluginName string) (pluginDir string, err error) {
-	downloadTmpDir, err := os.MkdirTemp("", "apito-plugin-download-*")
-	if err != nil {
-		return "", fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(downloadTmpDir)
-
-	zipPath, err := downloadFileWithProgress(downloadURL, downloadTmpDir)
-	if err != nil {
-		return "", err
-	}
-
-	extractDir, err := extractArchiveToTemp(zipPath)
-	if err != nil {
-		return "", fmt.Errorf("extract archive: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			os.RemoveAll(extractDir)
+		print_error(fmt.Sprintf("Install failed (%s): %s", parsed.Code, msg))
+		if parsed.Error != "" {
+			print_error(parsed.Error)
 		}
-	}()
-
-	configPath := filepath.Join(extractDir, "config.yml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("plugin package missing config.yml")
-	}
-
-	config, err := readPluginConfig(extractDir)
-	if err != nil {
-		return "", fmt.Errorf("invalid config: %w", err)
-	}
-
-	binaryPath := filepath.Join(extractDir, config.Plugin.BinaryPath)
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("plugin package missing binary at %s", config.Plugin.BinaryPath)
-	}
-
-	return extractDir, nil
-}
-
-func addPlugin(pluginNameOrURL, accountName string, forceReplace bool) {
-	print_step("🔌 Add Plugin")
-
-	var owner, repo, pluginID string
-
-	if o, r, ok := parseGitHubOwnerRepo(pluginNameOrURL); ok {
-		owner, repo, pluginID = o, r, r
-	} else {
-		reg, err := fetchPluginRegistry()
-		if err != nil {
-			print_error("Failed to fetch plugin registry: " + err.Error())
-			return
-		}
-		entry := findPluginInRegistry(reg, pluginNameOrURL)
-		if entry == nil {
-			print_error("Plugin '" + pluginNameOrURL + "' not found in registry.")
-			return
-		}
-		pluginID = entry.ID
-		var o, r string
-		o, r, ok = parseGitHubOwnerRepo(entry.GitHubURL)
-		if !ok {
-			print_error("Invalid github_url in registry for plugin " + pluginID)
-			return
-		}
-		owner, repo = o, r
-	}
-
-	print_status(fmt.Sprintf("Fetching latest release for %s/%s", owner, repo))
-
-	release, err := fetchLatestRelease(owner, repo)
-	if err != nil {
-		print_error("Failed to fetch release: " + err.Error())
 		return
 	}
-	if release == nil {
-		print_error(noReleaseMessage)
-		return
-	}
-
-	asset := findPlatformAsset(release, pluginID)
-	if asset == nil {
-		print_error(noReleaseMessage)
-		return
-	}
-
-	print_status(fmt.Sprintf("Downloading %s", asset.Name))
-
-	pluginDir, err := downloadAndExtractPlugin(asset.BrowserDownloadURL, pluginID)
-	if err != nil {
-		print_error("Failed to download plugin: " + err.Error())
-		return
-	}
-	defer os.RemoveAll(pluginDir)
-
-	deployPlugin(pluginDir, accountName, forceReplace)
+	print_success(parsed.Message)
 }

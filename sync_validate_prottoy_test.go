@@ -14,6 +14,10 @@ func TestValidateProttoyAstroSchemaJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	models = sanitizeBlueprintModels(models)
+	if len(models) == 0 {
+		t.Fatal("expected models after sanitize")
+	}
 	if issues := validateSyncModels(models); len(issues) != 0 {
 		t.Fatalf("%s", formatSchemaValidationReport(issues))
 	}

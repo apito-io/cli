@@ -23,8 +23,9 @@ var (
 )
 
 // filesystemAccountName is the reserved account name that maps to a local
-// directory (via --dir, defaulting to ~/.apito/temp/functions) instead of a
-// remote GraphQL endpoint. Only valid for --type functions.
+// directory (via --dir) instead of a remote GraphQL endpoint. Valid for
+// --type functions (default ~/.apito/temp/functions) and --type schema
+// (default ~/.apito/temp/schema, or a Blueprint dir containing schema.json).
 //
 // Note: a configured account literally named "local" (common for localhost
 // engines) is a normal remote account — it must NOT collide with this reserved
@@ -88,12 +89,12 @@ Schema changes are staged as drafts on pro engines — publish from Console when
 }
 
 func init() {
-	syncCmd.Flags().StringVar(&syncFromAccount, "from", "", "Source account name (or \"filesystem\" for on-disk functions)")
-	syncCmd.Flags().StringVar(&syncToAccount, "to", "", "Destination account name (or \"filesystem\" for on-disk functions)")
+	syncCmd.Flags().StringVar(&syncFromAccount, "from", "", "Source account name (or \"filesystem\" for on-disk schema/functions)")
+	syncCmd.Flags().StringVar(&syncToAccount, "to", "", "Destination account name (or \"filesystem\" for on-disk schema/functions)")
 	syncCmd.Flags().StringVar(&syncType, "type", "", "Sync type: schema, functions or content")
 	syncCmd.Flags().BoolVar(&syncDryRun, "dry-run", false, "Show planned changes without writing")
 	syncCmd.Flags().BoolVar(&syncYes, "yes", false, "Skip confirmation prompts")
-	syncCmd.Flags().StringVar(&syncDir, "dir", "", "Local functions directory (default: ~/.apito/temp/functions when using filesystem)")
+	syncCmd.Flags().StringVar(&syncDir, "dir", "", "Local Blueprint/schema or functions directory (defaults under ~/.apito/temp/{schema|functions})")
 	syncCmd.Flags().BoolVar(&syncDeploy, "deploy", false, "After upserting functions, deploy a new active revision on the destination")
 	syncCmd.Flags().BoolVar(&syncIncludeSecret, "include-secrets", false, "Copy rest_api_secret_url_key instead of regenerating on the destination")
 	syncCmd.Flags().BoolVar(&syncIncludeDeletes, "include-deletes", false, "Include destination-only field deletes in schema sync (destructive; with --yes skips the scope prompt)")
@@ -134,10 +135,22 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		kind := strings.ToLower(strings.TrimSpace(syncType))
-		if kind != "" && kind != "functions" {
-			return fmt.Errorf("account %q is only supported for --type functions", filesystemAccountName)
+		if kind == "" {
+			kind, err = selectSyncTypeFilesystem()
+			if err != nil {
+				return err
+			}
 		}
-		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, nil)
+		switch kind {
+		case "functions":
+			return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, nil)
+		case "schema":
+			return runLocalSchemaSync(fromName, toName, timeoutSec, syncDryRun, syncYes, syncIncludeDeletes, nil)
+		case "content":
+			return fmt.Errorf("account %q does not support --type content (use an SDK seed script after schema publish)", filesystemAccountName)
+		default:
+			return fmt.Errorf("account %q supports --type schema or functions (got %q)", filesystemAccountName, kind)
+		}
 	}
 
 	fromCfg, err := getAccountConfig(fromName)
@@ -157,10 +170,22 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 
 	if isFilesystemSyncSide(toName) {
 		kind := strings.ToLower(strings.TrimSpace(syncType))
-		if kind != "" && kind != "functions" {
-			return fmt.Errorf("account %q is only supported for --type functions", filesystemAccountName)
+		if kind == "" {
+			kind, err = selectSyncTypeFilesystem()
+			if err != nil {
+				return err
+			}
 		}
-		return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, &fromProject)
+		switch kind {
+		case "functions":
+			return runLocalFunctionSync(fromName, toName, timeoutSec, syncDeploy, syncIncludeSecret, syncDryRun, syncYes, &fromProject)
+		case "schema":
+			return runLocalSchemaSync(fromName, toName, timeoutSec, syncDryRun, syncYes, syncIncludeDeletes, &fromProject)
+		case "content":
+			return fmt.Errorf("account %q does not support --type content (export is schema/functions only)", filesystemAccountName)
+		default:
+			return fmt.Errorf("account %q supports --type schema or functions (got %q)", filesystemAccountName, kind)
+		}
 	}
 
 	toCfg, err := getAccountConfig(toName)
@@ -305,6 +330,21 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 func selectSyncType() (string, error) {
 	options := []string{"schema", "functions", "content"}
 	print_step("What do you want to sync?")
+	selector := promptui.Select{
+		Label: "Sync type",
+		Items: options,
+		Size:  len(options),
+	}
+	_, picked, err := selector.Run()
+	if err != nil {
+		return "", err
+	}
+	return picked, nil
+}
+
+func selectSyncTypeFilesystem() (string, error) {
+	options := []string{"schema", "functions"}
+	print_step("What do you want to sync from/to filesystem?")
 	selector := promptui.Select{
 		Label: "Sync type",
 		Items: options,
