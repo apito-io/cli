@@ -5,6 +5,7 @@ Apito CLI operator workflows. Platform SDK/schema concepts link to `apito/.knowl
 | Slug | Scope |
 |------|--------|
 | [apito-sync](apito-sync.md) | Schema/content sync between accounts via system GraphQL |
+| [apito-handover](apito-handover.md) | Self-host Enterprise → Apito Cloud (`apito handover *`) |
 | [plugin-lifecycle](plugin-lifecycle.md) | Build, deploy, update plugins |
 | [local-dev-orchestration](local-dev-orchestration.md) | start/stop/status/logs for engine+console |
 | [version-and-self-upgrade](version-and-self-upgrade.md) | CLI/engine/console version pins and self-upgrade |
