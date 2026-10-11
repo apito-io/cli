@@ -96,6 +96,7 @@ Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/t
 
 - Validate project profiles match before apply (driver/type compatibility).
 - Schema sync on pro never bypasses versioning — stages drafts, not live DDL directly.
+- A cardinality change (1:1, 1:N, N:1, N:N) is staged with `previewSchemaRelationTransition` and `stageRelationTransition`, using the live edge's model and `known_as` and the engine's exact acknowledgement. Both stored relations must be present; sync does not guess a missing one. `upsertConnectionToModel` stays for new relations and same-shape direction repairs. The engine rejects a storage-changing upsert. Sync still does not publish; Console publish runs the migration. Requires engine v2.5.0 or newer.
 - Use canonical naming from engine — sync merge relies on stable model/field IDs.
 
 ## Common bugs

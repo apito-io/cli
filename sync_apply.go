@@ -228,11 +228,15 @@ func applySyncTask(client *SyncGraphQLClient, task SyncTask, srcMap map[string]S
 			return fmt.Errorf("missing connection payload")
 		}
 		conn := ch.Connection
-		forward := conn.Relation
+		forward := strings.TrimSpace(conn.Relation)
+		reverse := strings.TrimSpace(ch.ReverseType)
+		if ch.Kind == ChangeUpdateConnection && forward != "" && reverse != "" &&
+			relationStorageChanging(ch.CurrentForward, ch.CurrentReverse, forward, reverse) {
+			return client.StageRelationTransition(ch.Model, conn.Model, ch.CurrentKnownAs, ch.CurrentForward, ch.CurrentReverse, forward, reverse)
+		}
 		if forward == "" {
 			forward = "has_many"
 		}
-		reverse := ch.ReverseType
 		if reverse == "" {
 			reverse = "has_many"
 		}

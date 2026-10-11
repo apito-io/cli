@@ -574,6 +574,136 @@ func (c *SyncGraphQLClient) UpsertConnection(fromModel, toModel, forwardType, re
 	return c.execute(mutation, vars, &out)
 }
 
+// StageRelationTransition previews a cardinality change and stages it as
+// update_connection. It does not publish. The acknowledgement is the exact
+// phrase returned by the engine preview.
+func (c *SyncGraphQLClient) StageRelationTransition(fromModel, toModel, knownAs, fromRel, toRel, targetFrom, targetTo string) error {
+	const previewQuery = `
+		query PreviewSchemaRelationTransition(
+			$from_model: String!
+			$to_model: String!
+			$known_as: String
+			$from_relation: String
+			$to_relation: String
+			$target_from_relation: String!
+			$target_to_relation: String!
+		) {
+			previewSchemaRelationTransition(
+				from_model: $from_model
+				to_model: $to_model
+				known_as: $known_as
+				from_relation: $from_relation
+				to_relation: $to_relation
+				target_from_relation: $target_from_relation
+				target_to_relation: $target_to_relation
+			) {
+				plan_hash
+				blocked
+				required_acknowledgement
+				warnings
+				blockers
+				disclaimers
+			}
+		}
+	`
+	vars := map[string]interface{}{
+		"from_model":           fromModel,
+		"to_model":             toModel,
+		"from_relation":        fromRel,
+		"to_relation":          toRel,
+		"target_from_relation": targetFrom,
+		"target_to_relation":   targetTo,
+	}
+	if knownAs != "" {
+		vars["known_as"] = knownAs
+	}
+	var preview struct {
+		Preview struct {
+			PlanHash                string   `json:"plan_hash"`
+			Blocked                 bool     `json:"blocked"`
+			RequiredAcknowledgement string   `json:"required_acknowledgement"`
+			Warnings                []string `json:"warnings"`
+			Blockers                []string `json:"blockers"`
+			Disclaimers             []string `json:"disclaimers"`
+		} `json:"previewSchemaRelationTransition"`
+	}
+	if err := c.execute(previewQuery, vars, &preview); err != nil {
+		return err
+	}
+	p := preview.Preview
+	if p.Blocked {
+		return fmt.Errorf("relation migration blocked: %s", strings.Join(p.Blockers, "; "))
+	}
+	if strings.TrimSpace(p.PlanHash) == "" {
+		return fmt.Errorf("relation migration preview returned an empty plan_hash")
+	}
+	for _, line := range p.Disclaimers {
+		fmt.Printf("  disclaimer: %s\n", line)
+	}
+	for _, line := range p.Warnings {
+		fmt.Printf("  warning: %s\n", line)
+	}
+	const stageMutation = `
+		mutation StageRelationTransition(
+			$from_model: String!
+			$to_model: String!
+			$known_as: String
+			$from_relation: String
+			$to_relation: String
+			$target_from_relation: String!
+			$target_to_relation: String!
+			$plan_hash: String!
+			$acknowledgement: String
+		) {
+			stageRelationTransition(
+				from_model: $from_model
+				to_model: $to_model
+				known_as: $known_as
+				from_relation: $from_relation
+				to_relation: $to_relation
+				target_from_relation: $target_from_relation
+				target_to_relation: $target_to_relation
+				plan_hash: $plan_hash
+				acknowledgement: $acknowledgement
+			) {
+				staged
+				message
+				plan_hash
+			}
+		}
+	`
+	stageVars := map[string]interface{}{
+		"from_model":           fromModel,
+		"to_model":             toModel,
+		"from_relation":        fromRel,
+		"to_relation":          toRel,
+		"target_from_relation": targetFrom,
+		"target_to_relation":   targetTo,
+		"plan_hash":            p.PlanHash,
+		"acknowledgement":      p.RequiredAcknowledgement,
+	}
+	if knownAs != "" {
+		stageVars["known_as"] = knownAs
+	}
+	var staged struct {
+		Stage struct {
+			Staged  bool   `json:"staged"`
+			Message string `json:"message"`
+		} `json:"stageRelationTransition"`
+	}
+	if err := c.execute(stageMutation, stageVars, &staged); err != nil {
+		return err
+	}
+	if !staged.Stage.Staged {
+		if staged.Stage.Message != "" {
+			return fmt.Errorf("relation migration was not staged: %s", staged.Stage.Message)
+		}
+		return fmt.Errorf("relation migration was not staged")
+	}
+	fmt.Printf("  staged relation migration %s → %s (%s/%s → %s/%s); publish it from Console\n", fromModel, toModel, fromRel, toRel, targetFrom, targetTo)
+	return nil
+}
+
 func (c *SyncGraphQLClient) GetModelData(modelName string, page, limit int) (*SyncModelDataResult, error) {
 	const query = `
 		query GetModelData($model: String!, $page: Int, $limit: Int, $status: FILTER_STATUS_TYPE_ENUM) {

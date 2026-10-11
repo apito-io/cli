@@ -20,14 +20,17 @@ const (
 )
 
 type SchemaChange struct {
-	ID            string
-	Kind          SchemaChangeKind
-	Model         string
-	Field         *SyncField
-	Connection    *SyncConnection
-	ReverseType   string
-	IsCommonModel bool // desired SaaS common flag (add_model / update_model)
-	Summary       string
+	ID             string
+	Kind           SchemaChangeKind
+	Model          string
+	Field          *SyncField
+	Connection     *SyncConnection
+	ReverseType    string
+	CurrentForward string // live from-side relation; set only for a cardinality migration
+	CurrentReverse string // live to-side relation; set only for a cardinality migration
+	CurrentKnownAs string // live edge known_as; set only for a cardinality migration
+	IsCommonModel  bool   // desired SaaS common flag (add_model / update_model)
+	Summary        string
 }
 
 type ModelSchemaDiff struct {
@@ -241,6 +244,53 @@ func findReverseRelationType(models map[string]SyncModel, fromModel, toModel str
 	return "has_many"
 }
 
+// lookupEdgeRelation reads one stored relation. Identity matches the engine:
+// owner model, peer model, and known_as. The forward/backward flag is not part
+// of that identity. An empty relation is not guessed.
+func lookupEdgeRelation(models map[string]SyncModel, owner, peer, knownAs string) (string, bool) {
+	target, ok := models[strings.ToLower(owner)]
+	if !ok {
+		return "", false
+	}
+	for _, c := range target.Connections {
+		if !strings.EqualFold(c.Model, peer) || !strings.EqualFold(strings.TrimSpace(c.KnownAs), strings.TrimSpace(knownAs)) {
+			continue
+		}
+		rel := strings.TrimSpace(c.Relation)
+		if rel == "" {
+			return "", false
+		}
+		return rel, true
+	}
+	return "", false
+}
+
+// relationShape matches relationmigrate.ShapeOf. The CLI does not import the
+// engine module; these four pairs are the storage shapes publish migrates.
+func relationShape(fromRel, toRel string) string {
+	fromRel = strings.ToLower(strings.TrimSpace(fromRel))
+	toRel = strings.ToLower(strings.TrimSpace(toRel))
+	switch {
+	case fromRel == "has_one" && toRel == "has_one":
+		return "1:1"
+	case fromRel == "has_many" && toRel == "has_one":
+		return "1:N"
+	case fromRel == "has_one" && toRel == "has_many":
+		return "N:1"
+	case fromRel == "has_many" && toRel == "has_many":
+		return "N:N"
+	default:
+		return ""
+	}
+}
+
+// relationStorageChanging reports a real cardinality move (FK side or pivot),
+// not a same-shape direction repair.
+func relationStorageChanging(fromRel, toRel, targetFrom, targetTo string) bool {
+	current, target := relationShape(fromRel, toRel), relationShape(targetFrom, targetTo)
+	return current != target && current != "" && target != ""
+}
+
 func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 	srcMap := make(map[string]SyncModel, len(sourceModels))
 	dstMap := make(map[string]SyncModel, len(destModels))
@@ -349,6 +399,28 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 				knownAs = c.Model
 			}
 			if destConn, ok := dstConnByKey[key]; ok {
+				currentForward, hasCurrentForward := lookupEdgeRelation(dstMap, src.Name, c.Model, destConn.KnownAs)
+				currentReverse, hasCurrentReverse := lookupEdgeRelation(dstMap, c.Model, src.Name, destConn.KnownAs)
+				targetForward, hasTargetForward := lookupEdgeRelation(srcMap, src.Name, c.Model, c.KnownAs)
+				targetReverse, hasTargetReverse := lookupEdgeRelation(srcMap, c.Model, src.Name, c.KnownAs)
+				if hasCurrentForward && hasCurrentReverse && hasTargetForward && hasTargetReverse &&
+					relationStorageChanging(currentForward, currentReverse, targetForward, targetReverse) {
+					changes = append(changes, SchemaChange{
+						ID:             fmt.Sprintf("conn-fix:%s:%s", src.Name, key),
+						Kind:           ChangeUpdateConnection,
+						Model:          src.Name,
+						Connection:     &connCopy,
+						ReverseType:    targetReverse,
+						CurrentForward: currentForward,
+						CurrentReverse: currentReverse,
+						CurrentKnownAs: destConn.KnownAs,
+						Summary: fmt.Sprintf(
+							"Migrate relation %q → %q from %s/%s to %s/%s (known_as: %q)",
+							src.Name, c.Model, currentForward, currentReverse, targetForward, targetReverse, destConn.KnownAs,
+						),
+					})
+					continue
+				}
 				destRel := destConn.Relation
 				if destRel == "" {
 					destRel = "has_many"

@@ -94,22 +94,22 @@ func TestFieldsMatchForSync_ValidationNullVsFalse(t *testing.T) {
 func TestFieldsMatchForSync_EmptyLocalsNilVsSlice(t *testing.T) {
 	// Draft schemaPreview often omits locals (nil); live returns []. Must not plan update_field.
 	src := SyncField{
-		Identifier: "type",
-		FieldType:  "list",
+		Identifier:   "type",
+		FieldType:    "list",
 		FieldSubType: "dropdown",
 		Validation: &SyncFieldValidation{
-			Locals:            []string{},
-			FixedListElements: []any{"a", "b"},
+			Locals:               []string{},
+			FixedListElements:    []any{"a", "b"},
 			FixedListElementType: "string",
 		},
 	}
 	dst := SyncField{
-		Identifier: "type",
-		FieldType:  "list",
+		Identifier:   "type",
+		FieldType:    "list",
 		FieldSubType: "dropdown",
 		Validation: &SyncFieldValidation{
-			Locals:            nil,
-			FixedListElements: []any{"a", "b"},
+			Locals:               nil,
+			FixedListElements:    []any{"a", "b"},
 			FixedListElementType: "string",
 		},
 	}
@@ -503,18 +503,18 @@ func TestComputeSchemaDiff_AddOrderParentsBeforeChildren(t *testing.T) {
 func TestFieldsMatchForSync_DetectsNestedMultiChoiceChange(t *testing.T) {
 	tTrue, tFalse := true, false
 	a := SyncField{
-		Identifier: "stage",
-		FieldType:  "list",
+		Identifier:  "stage",
+		FieldType:   "list",
 		ParentField: "stages",
-		Path:       "stages.stage",
-		Validation: &SyncFieldValidation{IsMultiChoice: &tFalse, FixedListElementType: "string"},
+		Path:        "stages.stage",
+		Validation:  &SyncFieldValidation{IsMultiChoice: &tFalse, FixedListElementType: "string"},
 	}
 	b := SyncField{
-		Identifier: "stage",
-		FieldType:  "list",
+		Identifier:  "stage",
+		FieldType:   "list",
 		ParentField: "stages",
-		Path:       "stages.stage",
-		Validation: &SyncFieldValidation{IsMultiChoice: &tTrue, FixedListElementType: "string"},
+		Path:        "stages.stage",
+		Validation:  &SyncFieldValidation{IsMultiChoice: &tTrue, FixedListElementType: "string"},
 	}
 	if fieldsMatchForSync(a, b) {
 		t.Fatal("is_multi_choice change must not match for sync")
@@ -568,8 +568,157 @@ func TestComputeSchemaDiff_FlippedConnectionPlansFix(t *testing.T) {
 	if changes[0].Kind != ChangeUpdateConnection {
 		t.Fatalf("kind = %q, want update_connection", changes[0].Kind)
 	}
+	if !relationStorageChanging(changes[0].CurrentForward, changes[0].CurrentReverse, "has_one", "has_many") {
+		t.Fatalf("expected 1:1 → N:1 storage change, got %s/%s", changes[0].CurrentForward, changes[0].CurrentReverse)
+	}
+	if !strings.Contains(changes[0].Summary, "Migrate relation") {
+		t.Fatalf("summary = %q", changes[0].Summary)
+	}
+}
+
+func TestComputeSchemaDiff_SameShapeDirectionFix(t *testing.T) {
+	source := []SyncModel{{
+		Name: "mark_config",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "forward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_config", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "mark_config",
+		Connections: []SyncConnection{
+			{Model: "class", Relation: "has_one", Type: "backward"},
+		},
+	}, {
+		Name: "class",
+		Connections: []SyncConnection{
+			{Model: "mark_config", Relation: "has_many", Type: "forward"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 1 {
+		t.Fatalf("changes = %#v, want 1 direction fix", changes)
+	}
+	if relationStorageChanging(changes[0].CurrentForward, changes[0].CurrentReverse, "has_one", "has_many") {
+		t.Fatalf("same-shape direction fix must not migrate: %s/%s", changes[0].CurrentForward, changes[0].CurrentReverse)
+	}
 	if !strings.Contains(changes[0].Summary, "Fix relation direction") {
 		t.Fatalf("summary = %q", changes[0].Summary)
+	}
+	if changes[0].CurrentForward != "" || changes[0].CurrentReverse != "" {
+		t.Fatalf("direction fix must not carry migration endpoints: %#v", changes[0])
+	}
+}
+
+func TestComputeSchemaDiff_OneToManyToManyToMany(t *testing.T) {
+	source := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+		Connections: []SyncConnection{
+			{Model: "lab_order", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+		Connections: []SyncConnection{
+			{Model: "lab_order", Relation: "has_one", Type: "backward"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 1 {
+		t.Fatalf("changes = %#v, want the reverse cardinality change", changes)
+	}
+	ch := changes[0]
+	if ch.Kind != ChangeUpdateConnection {
+		t.Fatalf("kind = %q", ch.Kind)
+	}
+	if ch.CurrentForward != "has_many" || ch.CurrentReverse != "has_one" {
+		t.Fatalf("current = %s/%s, want has_many/has_one", ch.CurrentForward, ch.CurrentReverse)
+	}
+	if ch.ReverseType != "has_many" {
+		t.Fatalf("target reverse = %q", ch.ReverseType)
+	}
+	if !relationStorageChanging(ch.CurrentForward, ch.CurrentReverse, "has_many", ch.ReverseType) {
+		t.Fatal("expected storage-changing 1:N → N:N")
+	}
+	if !strings.Contains(ch.Summary, "Migrate relation") {
+		t.Fatalf("summary = %q", ch.Summary)
+	}
+	if ch.CurrentKnownAs != "" {
+		t.Fatalf("known_as = %q, want the live empty edge", ch.CurrentKnownAs)
+	}
+}
+
+func TestComputeSchemaDiff_CardinalityMatchesKnownAs(t *testing.T) {
+	source := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+		Connections: []SyncConnection{
+			{Model: "lab_order", Relation: "has_many", Type: "backward", KnownAs: "panel"},
+			{Model: "lab_order", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+		Connections: []SyncConnection{
+			{Model: "lab_order", Relation: "has_many", Type: "backward", KnownAs: "panel"},
+			{Model: "lab_order", Relation: "has_one", Type: "backward"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 1 {
+		t.Fatalf("changes = %#v, want only the unnamed edge", changes)
+	}
+	if changes[0].CurrentReverse != "has_one" || changes[0].CurrentKnownAs != "" {
+		t.Fatalf("picked known_as %q reverse %q", changes[0].CurrentKnownAs, changes[0].CurrentReverse)
+	}
+}
+
+func TestComputeSchemaDiff_MissingReverseDoesNotInventMigration(t *testing.T) {
+	source := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+		Connections: []SyncConnection{
+			{Model: "lab_order", Relation: "has_many", Type: "backward"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "lab_order",
+		Connections: []SyncConnection{
+			{Model: "lab_test", Relation: "has_many", Type: "forward"},
+		},
+	}, {
+		Name: "lab_test",
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 0 {
+		t.Fatalf("missing reverse must keep the forward match, got %#v", changes)
 	}
 }
 

@@ -4,6 +4,13 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-10-11 — schema sync stages cardinality changes (v0.4.17)
+
+- **Changed:** A relation whose forward or reverse type changes storage is staged with `previewSchemaRelationTransition` and `stageRelationTransition`. New relations and same-shape repairs still use `upsertConnectionToModel`. Sync still does not publish.
+- **Why:** Upserting a new cardinality left the old foreign key in place. The engine now rejects that upsert.
+- **Affected:** `sync_diff.go`, `sync_apply.go`, `sync_graphql.go`. Tag **v0.4.17**. Needs engine **v2.5.0** or newer.
+
+---
 ## 2026-08-13 — dump hash version gate (v0.4.16)
 
 - **Changed:** Preflight reads `schema_hash_version`; fail with an algorithm-mismatch error when source/dest engines disagree (0 = older than v2.4.40).
