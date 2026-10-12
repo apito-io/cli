@@ -1,50 +1,50 @@
 ---
 type: feature
 title: Project and Plugin Create
-description: Scaffold new Apito projects and plugin directories from CLI
+description: Create a project on a connected account; scaffold plugins separately
 resource: create.go
-tags: [cli, create, scaffold]
-timestamp: 2026-07-07T00:00:00Z
+tags: [cli, create, accounts]
+timestamp: 2026-10-12T00:00:00Z
 ---
 
 # Project and Plugin Create
 
 ## Purpose
 
-`apito create` scaffolds new **projects** or **plugin** starter trees with expected `config.yml`, language layouts, and hooks into build/deploy commands.
+`apito create` creates a project on a connected account through `POST /system/project/create`. Plugin scaffolds stay on `apito plugin create`.
 
 ## Flows
 
-- **Project create**: interactive or flags → template files → optional link to engine account.
-- **Plugin create**: starter for Go/JS plugin SDK layout → next steps `plugin build` / `deploy`.
-- **Related**: `plugin add` for registering existing plugin metadata.
+- **Account**: one configured account is announced and used. Several accounts use the same picker as `apito sync`. Zero accounts asks to connect an account, then creates the project on that account.
+- **Project**: prompts for name, description, and general or SaaS, then sends a SQLite `db_config` to the system API. Local Studio and cloud accounts both work.
+- **Plugin**: `apito plugin create` scaffolds a plugin. `apito create` does not.
 
 ## Main files
 
-- `create.go`, `plugin_add.go`
-- Plugin templates referenced from create flow
-- Engine project creation (server-side) via API when hosted create used
+- `create.go`
+- `plugin_deploy.go` (`createPluginScaffold`)
+- `sync.go` (`resolveSyncAccount`)
 
 ## Dependencies
 
-- [plugin-lifecycle](plugin-lifecycle.md)
-- Engine [multi-tenancy-saas](../engine/.knowledge/features/multi-tenancy-saas.md) for SaaS project types
+- A connected account with `server_url` and an access token
+- Engine `ProjectCreation` on `/system/project/create`
 
 ## Invariants
 
-- Generated plugin ids must be unique per engine account.
-- Scaffold matches plugin build SDK expectations — do not hand-delete required files.
+- The command does not open a browser.
+- Silent config runs before account selection.
 
 ## Common bugs
 
-- Create locally but never deploy/register on engine → plugin invisible to loader.
-- Wrong language template → build command missing runtime.
+- No token on the account → the system API returns unauthorized.
+- Destination engine rejects the SQLite file config when that account requires another database engine.
 
 ## Tests
 
-- Manual scaffold + `plugin build` smoke
+- `apito create --help` describes account selection and points plugin scaffolds at `apito plugin create`.
 
 ## Related
 
-- Global [plugin-grpc-protocol](../../.knowledge/features/plugin-grpc-protocol.md)
+- [local-dev-orchestration](local-dev-orchestration.md)
 - [admin-and-ops](admin-and-ops.md)

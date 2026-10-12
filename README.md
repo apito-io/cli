@@ -113,7 +113,7 @@
 - **Enhanced Status Monitoring**: Database status display in `apito status` command
 - **Comprehensive Logging**: New `apito logs` command for service and database logs
 - **Admin Password Reset**: `apito admin password reset [email]` with engine URL (default `http://localhost:5050`) and reset-token prompt
-- **Init Update**: `apito init update` merges new default env keys into `~/.apito/bin/.env` so existing users get new vars without re-running full `apito init`
+- **Silent configuration**: if `~/.apito/config.yml` or `~/.apito/bin/.env` is missing, the CLI writes the defaults and prints one warning
 
 ## 📦 Installation
 
@@ -151,150 +151,55 @@ apito --version
 
 ## 🎯 Getting Started
 
-### 0. Initialize Apito CLI (First Time Setup)
+### 0. Configuration
+
+The first command that needs `~/.apito` writes `config.yml`, `bin/.env.engine`, and `bin/.env.console` when they are missing, then prints one warning and continues. There is no setup prompt. `.env.engine` holds the engine settings, including a generated `BRANKA_KEY` and signing-key paths. `.env.console` holds the console URLs. `apito start` mounts both files into Studio and mounts `~/.apito/db` at `/data`.
+
+Pin a Studio image with `studio_version` in `~/.apito/config.yml`. Leave it empty to use the latest published `ghcr.io/apito-io/studio` tag.
+
+### 1. Connect an account and create a project
 
 ```bash
-apito init
+apito account create local
+apito create
 ```
 
-This command will:
+`apito create` creates a project on a connected account through the system API. One account is selected automatically. Several accounts use the same picker as `apito sync`. Zero accounts asks you to connect one first. The account can be local Studio or cloud. Plugin scaffolds stay on `apito plugin create`.
 
-- Create core directories under `~/.apito` (e.g., `bin/`, `db/`, `logs/`, `run/`)
-- Create `~/.apito/bin/.env` with default system configuration
-- Ask you to choose a run mode: Docker (recommended, default) or Manual, and save it to `~/.apito/config.yml`
-- **Database setup is now handled separately** - use `apito start --db system` or `apito start --db project`
-- Validate database and environment settings
-- Check port availability (5050, 4000) and optionally free them (Manual mode only)
-- Guide you through any missing configuration
-
-### 1. Create Your First Project
+### 2. Start Studio
 
 ```bash
-apito create project -n my-awesome-app
+apito start
 ```
 
-This interactive command will:
-
-- Create a new project directory
-- Set up system and project databases
-- Download the latest Apito engine
-- Configure your project settings
-
-### 2. Start Apito Engine and Console
-
-```bash
-apito start [--db system|project]
-```
-
-This command will (based on run mode stored in `~/.apito/config.yml`):
-
-- **Docker mode (default, recommended)**:
-  - Ensure `~/.apito/docker-compose.yml` exists (engine + console)
-  - Mount `~/.apito/db -> /app/db` and `~/.apito/bin/.env -> /app/.env`
-  - Start services via `docker compose -f ~/.apito/docker-compose.yml up -d`
-  - **Optional**: `--db system` or `--db project` to start specific database types
-- **Manual mode**:
-  - Download the latest Apito engine to `~/.apito/bin/engine`
-  - Download the latest console to `~/.apito/console`
-  - Install and configure Caddy to `~/.apito/bin/caddy`
-  - Check and free ports 5050/4000 if needed
-  - Start engine and serve console locally (managed by PID + logs)
+This prepares `~/.apito` when the files are missing, pulls `ghcr.io/apito-io/studio`, and runs the `apito-studio` container. The console is at `http://localhost:5055`. The database stays in `~/.apito/db`. `apito stop`, `apito restart`, `apito status`, and `apito logs` talk to that container.
 
 ## 📚 Command Reference
 
 ### 🔧 **System Management**
 
-#### `init` - Initialize Apito CLI System
+#### Configuration
 
-Initializes and validates the Apito CLI system configuration.
+`~/.apito/config.yml`, `~/.apito/bin/.env.engine`, and `~/.apito/bin/.env.console` are created with defaults the first time a command needs them. The CLI prints one warning and continues. `.env.engine` is also copied to `~/.apito/bin/.env`. Set `studio_version` to pin `ghcr.io/apito-io/studio`; leave it empty to track the latest published tag.
 
-**Usage:**
+#### `migrate` - Copy a database onto an existing destination
 
-```bash
-apito init
-```
-
-**Features:**
-
-- Creates `~/.apito` directory if it doesn't exist
-- Sets up system configuration file with default values
-- **Database setup is now handled by `apito start --db` commands**
-- Validates system database configuration
-- Checks mandatory environment variables (ENVIRONMENT, CORS_ORIGIN, COOKIE_DOMAIN, BRANKA_KEY)
-- Validates database connection settings (host, port, user, password)
-- Checks port availability (5050, 4000)
-- Interactive configuration prompts for missing settings
-
-**What it checks:**
-
-- System database engine configuration (defaults to "coreDB")
-- Database connection parameters (host, port, user, password, database name)
-- Environment settings (local, development, staging, production)
-- CORS and cookie domain configuration
-- BRANKA_KEY generation (auto-generates if not provided)
-- Port availability for Apito services (5050, 4000)
-
-**Examples:**
-
-```bash
-# First-time setup
-apito init
-
-# Re-run to validate configuration
-apito init
-```
-
-#### `init update` - Merge New Env Keys and Update docker-compose
-
-Adds any **missing** default env keys to your existing `~/.apito/bin/.env` without overwriting existing values, and in **Docker mode** regenerates `~/.apito/docker-compose.yml` with the current template and component versions. Use this after upgrading the CLI when new env vars or compose changes are introduced.
+Copies one project's physical database, or one SaaS tenant database, from a source account onto a destination account. The destination project must already exist. If the schema hashes differ, the command stops and tells you to run `apito sync --type schema` first. This is not a schema migration and it is not `apito sync`.
 
 **Usage:**
 
 ```bash
-apito init update
+apito migrate
 ```
 
-**Behavior:**
-
-- **Env:** Reads `~/.apito/bin/.env` and compares it to the current default key set. Adds only keys that are missing, with their default values (e.g. a generated reset secret). Does not modify or remove existing keys.
-- **Docker (when mode is docker):** Fetches latest component versions (best effort), then **replaces** `~/.apito/docker-compose.yml` with the new content (engine + console images and config).
-- If no env keys were added and docker-compose was not updated (or not in Docker mode), prints **"Nothing to change."**
-
-**When to use:**
-
-- After a CLI upgrade that adds new env vars.
-- When you see documentation or release notes mentioning new `.env` variables.
-
-**Examples:**
-
-```bash
-apito init update
-# Output (env keys added + Docker mode):
-# [SUCCESS] Updated ~/.apito/bin/.env
-# [INFO]   Added: APITO_ADMIN_RESET_SECRET
-# [SUCCESS] Updated ~/.apito/docker-compose.yml
-
-# Output (Docker mode, env already up to date):
-# [SUCCESS] Updated ~/.apito/docker-compose.yml
+A remote destination needs `--allow-push` and a second confirmation.
 
 # Output (nothing to do):
 # [INFO] Nothing to change.
 ```
 
 **Default Configuration:**
-The init command creates a `.env` file with these default values:
-
-```env
-ENVIRONMENT=local
-COOKIE_DOMAIN=localhost
-CORS_ORIGIN=http://localhost:4000
-PLUGIN_PATH=plugins
-PUBLIC_KEY_PATH=keys/public.key
-PRIVATE_KEY_PATH=keys/private.key
-APITO_SYSTEM_DB_ENGINE=embed
-BRANKA_KEY=<auto-generated-32-character-key>
-APITO_ADMIN_RESET_SECRET=<auto-generated-12-char-secret>
-```
+The first run writes `~/.apito/bin/.env.engine` and `~/.apito/bin/.env.console`. The engine file points the database at `/data` inside the container, which is the `~/.apito/db` volume. `BRANKA_KEY` is a generated 32-character key. An existing key is kept. The engine listens on port `5051` inside the container. The console file points the UI at `http://localhost:5055`. The first start prints `oss@apito.io` and a random admin password. Later starts keep that password.
 
 **BRANKA_KEY Behavior:**
 
@@ -1241,39 +1146,6 @@ apito restart --db system
 apito restart --db project
 ```
 
-### 🏗️ **Building & Packaging**
-
-#### `build` - Build Project
-
-Builds your project for different deployment targets.
-
-**Usage:**
-
-```bash
-apito build <target> -p <project> [options]
-```
-
-**Targets:**
-
-- `docker` - Build Docker image
-- `zip` - Create deployment package
-
-**Options:**
-
-- `--project, -p` - Project name (required)
-- `--tag, -t` - Docker image tag (optional, for docker builds)
-
-**Examples:**
-
-```bash
-# Build Docker image
-apito build docker -p my-ecommerce-app
-apito build docker -p my-ecommerce-app -t v1.0.0
-
-# Create ZIP package
-apito build zip -p my-ecommerce-app
-```
-
 ### 🔄 **Updates & Maintenance**
 
 #### `update` - Update Components
@@ -1444,7 +1316,7 @@ The CLI automatically manages engine and console versions with smart update dete
 
 #### **How It Works:**
 
-1. **During `apito init`** (Docker mode):
+1. **When configuration is first written**:
 
    - Automatically fetches latest versions from GitHub releases
    - Stores versions in `~/.apito/config.yml`
@@ -1508,11 +1380,7 @@ engine_version: v1.2.0 # Downgrade to specific version
 console_version: latest # Use latest tag
 ```
 
-Then regenerate docker-compose.yml:
-
-```bash
-apito init  # Will respect your manual version settings
-```
+`studio_version` in the same file pins `ghcr.io/apito-io/studio`. Leave it empty to use the latest published tag. The next `apito start` pulls that tag.
 
 ## 🚨 Troubleshooting
 
@@ -1592,7 +1460,7 @@ apito start
 # The CLI now asks for confirmation before overwriting
 # If you need to reset configuration:
 rm ~/.apito/bin/.env
-apito init
+apito status
 ```
 
 **Logs and Monitoring Issues:**
@@ -1738,13 +1606,27 @@ apito plugin deploy                 # Deploy to production (uses default, requir
 - **GitHub**: https://github.com/apito-io/cli
 - **Support**: https://github.com/apito-io/cli/issues
 
+## Sync a local project to Apito Cloud
+
+Both engines keep schema drafts until you publish. Cloud adds managed collaboration and production publish.
+
+```bash
+apito account create local
+apito account create production
+# apt_ tokens on both accounts
+apito sync --from local --to production --dry-run
+apito sync --from local --to production --yes
+```
+
+Then open the Cloud console and publish the staged schema. Optional later steps copy content and functions. Docker is the default run mode and pulls `ghcr.io/apito-io/engine` and `ghcr.io/apito-io/console`. An experimental local binary is available from GitHub release zips.
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details. The engine and console are Fair Source (FSL-1.1-ALv2) and convert to Apache 2.0 two years after each release. This CLI is Apache 2.0 now.
 
 ---
 

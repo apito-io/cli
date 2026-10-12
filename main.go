@@ -24,9 +24,7 @@ func main() {
 	var project string
 	rootCmd.PersistentFlags().StringVar(&project, "project", "", "ver")
 
-	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(createCmd)
-	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)

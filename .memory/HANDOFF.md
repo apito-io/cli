@@ -1,5 +1,11 @@
 # CLI — Handoff
 
+## Fair Source copy (2026-10-11)
+
+- **Done:** User strings no longer say pro engines or Studio `ENGINE_REF`. SaaS catalog replace confirms with `tenants`. README has a project-to-project sync section.
+- **Not done:** A new tag. The running `apito` binary is still the last release until rebuilt.
+- **Do not:** Change the confirm word back to `pro_tenants`. Tag from this alone. `./command.sh save` until asked.
+
 ## Released
 
 - `main` — tag **v0.4.17** (schema sync stages cardinality changes). Needs engine **v2.5.0** or newer.

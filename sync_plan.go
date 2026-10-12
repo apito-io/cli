@@ -232,7 +232,7 @@ func printApplyConfirmationBlock(endpoints SyncEndpoints, changes []SchemaChange
 }
 
 // applyModeLabel reflects engine behavior: is_common_model updates apply live;
-// other schema ops stage a draft on pro until Console publish.
+// other schema ops stage a draft until the console publishes.
 func applyModeLabel(changes []SchemaChange) string {
 	draft, immediate := 0, 0
 	for _, ch := range changes {
@@ -248,7 +248,7 @@ func applyModeLabel(changes []SchemaChange) string {
 	case immediate > 0:
 		return "apply immediately (metadata; no draft)"
 	default:
-		return "staged as draft on pro"
+		return "staged as a draft until you publish"
 	}
 }
 

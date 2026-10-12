@@ -180,7 +180,7 @@ func isDraftStagedDespiteSyncError(err error) bool {
 }
 
 // isSchemaApplyTimeout is returned when the HTTP client gives up waiting for
-// headers. On pro engines the mutation often still completes and stages the draft
+// headers. The mutation often still completes and stages the draft
 // (Litestream wait can exceed the old 30s default).
 func isSchemaApplyTimeout(err error) bool {
 	if err == nil {

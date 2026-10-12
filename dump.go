@@ -20,17 +20,17 @@ var (
 )
 
 var dumpCmd = &cobra.Command{
-	Use:   "dump",
-	Short: "Replace a destination project or tenant database from another Apito instance",
-	Long: `Portable dump/restore between configured accounts.
+	Use:   "migrate",
+	Short: "Copy a project or tenant database onto an existing destination",
+	Long: `Copy one project's physical database, or one SaaS tenant database, from a
+source account onto a destination account.
 
-Selects FROM and TO accounts and projects like apito sync, then replaces the
-destination physical database. Destination project (and tenant, for SaaS
-per-tenant) must already exist. Schema is a preflight hash — run
-apito sync --type schema first if it does not match.
+The destination project must already exist. Schema is only checked: if the
+hashes differ, the command stops and tells you to run apito sync --type schema
+first. This is not a schema migration and it is not apito sync.
 
-v1 is pull-only by default (destination must be local). Push to a remote
-instance requires --allow-push and a second confirmation.`,
+The destination is local unless you pass --allow-push, which also asks for a
+second confirmation.`,
 	SilenceUsage: true,
 	RunE:         runDumpCommand,
 }
@@ -46,6 +46,9 @@ func init() {
 }
 
 func runDumpCommand(cmd *cobra.Command, args []string) error {
+	if err := ensureCLIConfig(); err != nil {
+		return err
+	}
 	cfg, err := loadCLIConfig()
 	if err != nil {
 		return err
@@ -67,7 +70,7 @@ func runDumpCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if isFilesystemSyncSide(fromName) {
-		return fmt.Errorf("apito dump does not support the filesystem account")
+		return fmt.Errorf("apito migrate does not support the filesystem account")
 	}
 	fromCfg, err := getAccountConfig(fromName)
 	if err != nil {
@@ -84,7 +87,7 @@ func runDumpCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if isFilesystemSyncSide(toName) {
-		return fmt.Errorf("apito dump does not support the filesystem account")
+		return fmt.Errorf("apito migrate does not support the filesystem account")
 	}
 	toCfg, err := getAccountConfig(toName)
 	if err != nil {
@@ -343,13 +346,13 @@ func confirmDumpDestructive(toName, toURL string, toProject SyncProject, destTen
 	}
 
 	if profile == "saas-shared" {
-		print_warning("This will replace pro_tenants rows for this project only.")
-		p2 := promptui.Prompt{Label: `Type "pro_tenants" to confirm catalog replace`}
+		print_warning("This will replace tenant catalog rows for this project only.")
+		p2 := promptui.Prompt{Label: `Type "tenants" to confirm catalog replace`}
 		got, err = p2.Run()
 		if err != nil {
 			return fmt.Errorf("confirmation cancelled")
 		}
-		if strings.TrimSpace(got) != "pro_tenants" {
+		if strings.TrimSpace(got) != "tenants" {
 			return fmt.Errorf("SaaS catalog confirmation failed")
 		}
 	}

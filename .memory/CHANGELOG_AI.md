@@ -4,6 +4,13 @@ Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-10-11 — Fair Source user strings
+
+- **Changed:** Dump confirmation compares against `tenants`. Sync status text says the change is staged as a draft. README explains `apito sync` from a local engine to Apito Cloud.
+- **Why:** The public CLI should not name private catalog tables or a Studio pin.
+- **Affected:** `dump.go`, `sync.go`, `sync_apply.go`, `sync_plan.go`, `dump_preflight.go`, `README.md`. `go build` succeeded. Not tagged. Ask before `./command.sh save`.
+
+---
 ## 2026-10-11 — schema sync stages cardinality changes (v0.4.17)
 
 - **Changed:** A relation whose forward or reverse type changes storage is staged with `previewSchemaRelationTransition` and `stageRelationTransition`. New relations and same-shape repairs still use `upsertConnectionToModel`. Sync still does not publish.

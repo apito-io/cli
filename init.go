@@ -11,30 +11,7 @@ import (
 	"strings"
 
 	"github.com/manifoldco/promptui"
-	"github.com/spf13/cobra"
 )
-
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize Apito CLI system configuration",
-	Long:  `Initialize and validate Apito CLI system configuration, check ports, and set up required environment variables.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		initializeSystem()
-	},
-}
-
-var initUpdateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update system .env with new default keys",
-	Long:  `Merges missing default env keys into ~/.apito/bin/.env. Use after upgrading the CLI when new env vars are introduced. Prints what was added, or "Nothing to change." if already up to date.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		runInitUpdate()
-	},
-}
-
-func init() {
-	initCmd.AddCommand(initUpdateCmd)
-}
 
 func runInitUpdate() {
 	homeDir, err := os.UserHomeDir()
@@ -49,7 +26,7 @@ func runInitUpdate() {
 		return
 	}
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
-		print_error("No system .env found at ~/.apito/bin/.env. Run 'apito init' first.")
+		print_error("No system .env found at ~/.apito/bin/.env.")
 		return
 	}
 
@@ -200,7 +177,7 @@ func initializeSystem() {
 	fmt.Println()
 
 	print_success("🎉 Apito CLI system initialization completed successfully!")
-	print_status("You can now start apito studio using : apito start")
+	print_status("You can now start Apito using: apito start")
 }
 
 func ensureApitoDirectory() error {
@@ -251,31 +228,35 @@ func getDefaultEnvConfig(runMode, homeDir string) map[string]string {
 		defaultSaaSProjectDBPath = filepath.Join(dbDataDir, "apito_saas_project.db")
 	}
 	return map[string]string{
-		"ENVIRONMENT":                 "local",
-		"AUTH_SERVICE_PROVIDER":       "local",
-		"BRANKA_KEY":                  "",
-		"COOKIE_DOMAIN":               "localhost",
-		"CORS_ORIGIN":                 "http://localhost:4000",
-		"PLUGIN_PATH":                 "plugins",
-		"PRIVATE_KEY_PATH":            "keys/private.key",
-		"PUBLIC_KEY_PATH":             "keys/public.key",
-		"SERVE_PORT":                  "5050",
-		"TOKEN_TTL":                   "60",
-		"APITO_ADMIN_RESET_SECRET":    generateSecurePassword(),
-		"DEFAULT_DATABASE_DIR":        defaultDatabaseDir,
-		"CACHE_DB":                    "memory",
-		"CACHE_DB_HOST":               cacheDatabasePath,
-		"CACHE_TTL":                   "600",
-		"KV_ENGINE":                   "coreDB",
-		"KV_DATABASE":                 kvDatabasePath,
-		"QUEUE_ENGINE":                "coreDB",
-		"QUEUE_DATABASE":              queueDatabasePath,
-		"SYSTEM_DB_ENGINE":            "coreDB",
-		"SYSTEM_DB_NAME":             systemDatabasePath,
-		"PROJECT_DB_ENGINE":           "coreDB",
-		"PROJECT_DB_NAME":             projectDatabasePath,
+		"ENVIRONMENT":                  "local",
+		"AUTH_SERVICE_PROVIDER":        "local",
+		"BRANKA_KEY":                   "",
+		"COOKIE_DOMAIN":                "localhost",
+		"CORS_ORIGIN":                  "http://localhost:4000",
+		"PLUGIN_PATH":                  "plugins",
+		"PRIVATE_KEY_PATH":             "keys/private.key",
+		"PUBLIC_KEY_PATH":              "keys/public.key",
+		"SERVE_PORT":                   "5050",
+		"TOKEN_TTL":                    "60",
+		"APITO_ADMIN_RESET_SECRET":     generateSecurePassword(),
+		"DEFAULT_DATABASE_DIR":         defaultDatabaseDir,
+		"CACHE_DB":                     "memory",
+		"CACHE_DB_HOST":                cacheDatabasePath,
+		"CACHE_TTL":                    "600",
+		"KV_ENGINE":                    "coreDB",
+		"KV_DATABASE":                  kvDatabasePath,
+		"QUEUE_ENGINE":                 "coreDB",
+		"QUEUE_DATABASE":               queueDatabasePath,
+		"SYSTEM_DB_ENGINE":             "coreDB",
+		"SYSTEM_DB_NAME":               systemDatabasePath,
+		"PROJECT_DB_ENGINE":            "coreDB",
+		"PROJECT_DB_NAME":              projectDatabasePath,
 		"DEFAULT_SAAS_PROJECT_DB_NAME": defaultSaaSProjectDBPath,
 	}
+}
+
+func writeDefaultEnvIfMissing() (bool, error) {
+	return ensureStudioFiles()
 }
 
 func ensureDefaultEnvironmentConfig(runMode string) error {

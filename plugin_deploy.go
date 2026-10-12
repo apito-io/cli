@@ -27,6 +27,12 @@ var pluginCmd = &cobra.Command{
 	Use:   "plugin",
 	Short: "Manage plugins (create, deploy, update, list, status)",
 	Long:  `Plugin management commands for creating, deploying, updating, and monitoring HashiCorp plugins`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if err := ensureCLIConfig(); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
+		}
+	},
 }
 
 var pluginCreateCmd = &cobra.Command{

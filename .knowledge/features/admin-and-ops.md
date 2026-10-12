@@ -11,18 +11,18 @@ timestamp: 2026-07-07T00:00:00Z
 
 ## Purpose
 
-Operator-facing CLI beyond sync/plugins: **account** management, **config** YAML, **admin** subcommands, **build** zip/docker packaging, and shared **utility** helpers.
+Operator-facing CLI beyond sync/plugins: **account** management, **config** YAML, **admin** subcommands, and shared **utility** helpers. Missing `~/.apito` config or env is recreated with one warning.
 
 ## Flows
 
 - **Accounts**: `apito account create|list` — map friendly names to `server_url` + `cloud_sync_key`.
 - **Config**: `apito config` — default account, mode (docker/manual), timeouts.
 - **Admin**: privileged maintenance commands (see `admin.go` for current surface).
-- **Build**: `apito build` — package project for docker or zip deploy.
+- **Migrate**: `apito migrate` copies a project or tenant database onto an existing destination.
 
 ## Main files
 
-- `admin.go`, `config.go`, `build.go`, `utility.go`
+- `admin.go`, `config.go`, `dump.go`, `utility.go`
 - `config.yml.example` — documented keys
 
 ## Dependencies

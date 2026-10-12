@@ -21,7 +21,15 @@ func getEnvPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error finding home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".apito", "bin", ConfigFile), nil
+	enginePath := filepath.Join(homeDir, ".apito", "bin", studioEngineEnvName)
+	if fileExists(enginePath) {
+		return enginePath, nil
+	}
+	legacyPath := filepath.Join(homeDir, ".apito", "bin", ConfigFile)
+	if fileExists(legacyPath) {
+		return legacyPath, nil
+	}
+	return enginePath, nil
 }
 
 // ReadEnv reads the entire .env file and returns a map of key-value pairs
@@ -59,12 +67,11 @@ func WriteEnv(envMap map[string]string) error {
 		return fmt.Errorf("error creating bin directory: %w", err)
 	}
 
-	// Write the environment variables to the .env file
-	if err := godotenv.Write(envMap, envPath); err != nil {
-		return fmt.Errorf("error writing .env file: %w", err)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("error finding home directory: %w", err)
 	}
-
-	return nil
+	return writeEngineEnvFiles(homeDir, envMap)
 }
 
 // UpdateEnv updates a single environment variable in the .env file

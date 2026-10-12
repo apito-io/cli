@@ -11,8 +11,8 @@ import (
 )
 
 var logsCmd = &cobra.Command{
-	Use:   "logs [engine|console] [--db system|project] [--follow] [--tail N]",
-	Short: "Show logs for Apito services and databases",
+	Use:   "logs [--db system|project] [--follow] [--tail N]",
+	Short: "Show logs for the public Studio container",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		mode, _ := determineRunMode()
@@ -21,6 +21,13 @@ var logsCmd = &cobra.Command{
 		dbFlag, _ := cmd.Flags().GetString("db")
 		follow, _ := cmd.Flags().GetBool("follow")
 		tail, _ := cmd.Flags().GetInt("tail")
+
+		if dbFlag == "" {
+			if err := studioLogs(follow, tail); err != nil {
+				print_error(err.Error())
+			}
+			return
+		}
 
 		if mode == "docker" {
 			if err := ensureDockerAndComposeAvailable(); err != nil {

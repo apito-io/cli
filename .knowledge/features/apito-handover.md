@@ -24,7 +24,7 @@ apito handover cutover
 apito handover resume --job <id>
 ```
 
-Cutover: maintenance window, checksums, media copy, secret reauth, DNS switch, rollback window. Reuses `apito sync` and `apito dump`.
+Cutover: maintenance window, checksums, media copy, secret reauth, DNS switch, rollback window. Reuses `apito sync` and `apito migrate`.
 
 ## Main files
 

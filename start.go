@@ -23,21 +23,20 @@ var startWithDB bool
 
 var startCmd = &cobra.Command{
 	Use:   "start [--db system|project]",
-	Short: "Start the Apito engine and console",
-	Long:  `Start the Apito engine and console with automatic setup and downloads. Optionally start a system or project database in Docker mode.`,
+	Short: "Start the public Studio image",
+	Long:  `Prepare ~/.apito on first run, then pull and run ghcr.io/apito-io/studio. The first run writes config.yml, .env.engine, and .env.console, generates the engine key and signing keys, and continues. The container mounts those files and stores the database in ~/.apito/db. The console is at http://localhost:5055. The image tag comes from studio_version in ~/.apito/config.yml, or the latest published tag when that field is empty.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check if --db flag is set
 		dbType, _ := cmd.Flags().GetString("db")
-
-		// If --db specified, run database helper first
 		if dbType != "" {
 			if dbType != "system" && dbType != "project" {
 				print_error("Invalid database type. Use 'system' or 'project'")
 				return
 			}
 			startDatabaseInteractive(dbType)
-		} else {
-			startApito()
+			return
+		}
+		if err := startStudioContainer(); err != nil {
+			print_error(err.Error())
 		}
 	},
 }
@@ -77,7 +76,7 @@ func startApito() {
 		}
 		apitoDir := filepath.Join(homeDir, ".apito")
 		if _, statErr := os.Stat(apitoDir); os.IsNotExist(statErr) {
-			print_error("Apito is not initialized. Please run: apito init")
+			print_error("Apito configuration directory is missing.")
 			return
 		}
 
@@ -86,7 +85,7 @@ func startApito() {
 		envFile := filepath.Join(binDir, ".env")
 		dbDir := filepath.Join(apitoDir, "db")
 		if _, err := os.Stat(envFile); os.IsNotExist(err) {
-			print_error("Missing ~/.apito/bin/.env. Please run: apito init")
+			print_error("Missing ~/.apito/bin/.env.")
 			return
 		}
 		if _, err := os.Stat(dbDir); os.IsNotExist(err) {

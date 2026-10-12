@@ -12,10 +12,17 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status [engine|console] [--db system|project]",
-	Short: "Show running status for Apito services",
+	Use:   "status [--db system|project]",
+	Short: "Show the public Studio container status",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		dbType, _ := cmd.Flags().GetString("db")
+		if dbType == "" {
+			if err := studioStatus(); err != nil {
+				print_error(err.Error())
+			}
+			return
+		}
 		mode, _ := determineRunMode()
 		if mode == "docker" {
 			if err := ensureDockerAndComposeAvailable(); err != nil {

@@ -11,13 +11,13 @@ import (
 )
 
 var (
-	syncFromAccount   string
-	syncToAccount     string
-	syncType          string
-	syncDryRun        bool
-	syncYes           bool
-	syncDir           string
-	syncDeploy        bool
+	syncFromAccount    string
+	syncToAccount      string
+	syncType           string
+	syncDryRun         bool
+	syncYes            bool
+	syncDir            string
+	syncDeploy         bool
 	syncIncludeSecret  bool
 	syncIncludeDeletes bool
 )
@@ -82,7 +82,7 @@ var syncCmd = &cobra.Command{
 
 Uses the system GraphQL API (/system/graphql) with unified apt_ access tokens
 (Authorization: Bearer). Legacy cli-/mcp-/sdk- prefixed keys are retired.
-Schema changes are staged as drafts on pro engines — publish from Console when ready.`,
+Schema changes are staged as drafts — publish from the console when ready.`,
 	// Sync failures are runtime problems, not bad invocations; the flag dump buries them.
 	SilenceUsage: true,
 	RunE:         runSyncCommand,
@@ -102,6 +102,9 @@ func init() {
 }
 
 func runSyncCommand(cmd *cobra.Command, args []string) error {
+	if err := ensureCLIConfig(); err != nil {
+		return err
+	}
 	cfg, err := loadCLIConfig()
 	if err != nil {
 		return err
@@ -114,7 +117,7 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 	if timeoutSec <= 0 {
 		timeoutSec = 30
 	}
-	// Schema mutations on pro engines often wait on Litestream/replica sync before
+	// Schema mutations often wait on replica sync before
 	// returning headers; the old 30s default commonly times out after the draft was
 	// already staged. Floor sync HTTP timeout at 120s unless the user set higher.
 	if timeoutSec < 120 {

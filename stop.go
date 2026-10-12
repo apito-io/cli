@@ -8,8 +8,8 @@ import (
 )
 
 var stopCmd = &cobra.Command{
-	Use:   "stop [engine|console|all] [--db system|project]",
-	Short: "Stop Apito services",
+	Use:   "stop [--db system|project]",
+	Short: "Stop the public Studio container",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if --db flag is set
@@ -32,6 +32,11 @@ var stopCmd = &cobra.Command{
 			print_success(dbType + " database stopped")
 			return
 		}
+
+		if err := stopStudioContainer(); err != nil {
+			print_error(err.Error())
+		}
+		return
 
 		mode, _ := determineRunMode()
 		target := "all"
@@ -103,8 +108,8 @@ var stopCmd = &cobra.Command{
 }
 
 var restartCmd = &cobra.Command{
-	Use:   "restart [engine|console|all] [--db system|project] [--rebuild]",
-	Short: "Restart Apito services",
+	Use:   "restart [--db system|project]",
+	Short: "Restart the public Studio container",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if --db flag is set
@@ -127,6 +132,11 @@ var restartCmd = &cobra.Command{
 			print_success(dbType + " database restarted")
 			return
 		}
+
+		if err := restartStudioContainer(); err != nil {
+			print_error(err.Error())
+		}
+		return
 
 		mode, _ := determineRunMode()
 		target := "all"

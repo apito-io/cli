@@ -28,6 +28,7 @@ type CLIConfig struct {
 	Accounts       map[string]AccountConfig `yaml:"accounts"`                  // Account configurations
 	EngineVersion  string                   `yaml:"engine_version,omitempty"`  // Current engine version
 	ConsoleVersion string                   `yaml:"console_version,omitempty"` // Current console version
+	StudioVersion  string                   `yaml:"studio_version,omitempty"`  // ghcr.io/apito-io/studio tag; empty tracks latest
 
 	// Legacy fields for backward compatibility
 	ServerURL    string `yaml:"server_url,omitempty"`     // Legacy: Apito server URL
@@ -95,6 +96,50 @@ func loadCLIConfig() (*CLIConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// ensureCLIConfig recreates ~/.apito/config.yml and ~/.apito/bin/.env when either
+// file is missing, prints one warning, and continues.
+func ensureCLIConfig() error {
+	if err := ensureBaseDirs(); err != nil {
+		return err
+	}
+	created := false
+
+	path, err := configFilePath()
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		cfg := &CLIConfig{
+			Mode:     "docker",
+			Timeout:  30,
+			Accounts: map[string]AccountConfig{},
+		}
+		if err := saveCLIConfig(cfg); err != nil {
+			return err
+		}
+		created = true
+	}
+
+	envCreated, err := writeDefaultEnvIfMissing()
+	if err != nil {
+		return err
+	}
+	if created || envCreated {
+		print_warning("Created missing Apito configuration under ~/.apito and continued.")
+	}
+	return nil
+}
+
+func studioImageRef(cfg *CLIConfig) string {
+	tag := "latest"
+	if cfg != nil {
+		if pinned := strings.TrimSpace(cfg.StudioVersion); pinned != "" {
+			tag = pinned
+		}
+	}
+	return "ghcr.io/apito-io/studio:" + tag
 }
 
 func saveCLIConfig(cfg *CLIConfig) error {
@@ -316,6 +361,13 @@ func init() {
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configResetCmd)
+
+	accountCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if err := ensureCLIConfig(); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
+		}
+	}
 
 	// Add account commands
 	accountCmd.AddCommand(accountCreateCmd)

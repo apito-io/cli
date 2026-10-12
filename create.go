@@ -1,131 +1,172 @@
 package main
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
+	"bytes"
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
-func init() {}
-
 var createCmd = &cobra.Command{
-	Use:       "create",
-	Short:     "Create a new project or plugin",
-	Long:      `Create a new project (redirects to console) or scaffold a plugin repository`,
-	ValidArgs: []string{"project", "plugin"},
-	Args:      cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
+	Use:   "create",
+	Short: "Create a project on a connected account",
+	Long: `Create a project on a local Studio account or a cloud account.
+
+One configured account is used automatically. Several accounts open the same
+picker as apito sync. When no account is connected, the command asks you to
+connect one and then creates the project through the system API.
+
+Plugin scaffolds stay on apito plugin create.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		switch args[0] {
-		case "project":
-			print_success("Project creation moved to Apito Console.")
-			print_status("Open: http://localhost:4000/project/new")
-		case "plugin":
-			createPlugin()
-		default:
-			print_error("Invalid create option. Use 'project' or 'plugin'.")
-		}
+		createProject()
 	},
 }
 
-type CreateProjectRequest struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	DatabaseType string `json:"database_type"`
-}
-
-type CreateProjectResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Data    struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"data,omitempty"`
-}
-
-func createPlugin() {
-	print_step("🔌 Create Plugin Scaffold")
-	langs := []string{"golang (default)", "javascript", "python"}
-	sel := promptui.Select{Label: "Select language", Items: langs}
-	idx, _, err := sel.Run()
-	if err != nil {
+func createProject() {
+	if err := ensureCLIConfig(); err != nil {
+		print_error(err.Error())
 		return
 	}
-	repo := "git@github.com:apito-io/apito-hello-world-go-plugin.git"
-	if idx == 1 {
-		repo = "git@github.com:apito-io/apito-hello-world-js-plugin.git"
-	}
-	if idx == 2 {
-		repo = "git@github.com:apito-io/apito-hello-world-python-plugin.git"
-	}
-
-	// choose directory
-	dirChoice := promptui.Select{
-		Label: "Where to create the plugin?",
-		Items: []string{"Current directory", "Different directory"},
-	}
-	dirIdx, _, err := dirChoice.Run()
+	accountName, err := resolveAccountForCreate()
 	if err != nil {
+		print_error(err.Error())
+		return
+	}
+	account, err := getAccountConfig(accountName)
+	if err != nil {
+		print_error(err.Error())
 		return
 	}
 
-	var targetDir string
-	if dirIdx == 0 {
-		cwd, err := os.Getwd()
-		if err != nil {
-			print_error("Could not get current directory: " + err.Error())
-			return
+	namePrompt := promptui.Prompt{Label: "Project name", Validate: func(s string) error {
+		if strings.TrimSpace(s) == "" {
+			return fmt.Errorf("name is required")
 		}
-		targetDir = cwd
-	} else {
-		prompt := promptui.Prompt{
-			Label: "Enter directory path (e.g. ~/projects or /path/to/parent)",
-		}
-		pathInput, err := prompt.Run()
-		if err != nil {
-			return
-		}
-		pathInput = strings.TrimSpace(pathInput)
-		if pathInput == "" {
-			print_error("Directory path cannot be empty.")
-			return
-		}
-		if strings.HasPrefix(pathInput, "~") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				print_error("Could not resolve home directory: " + err.Error())
-				return
+		return nil
+	}}
+	name, err := namePrompt.Run()
+	if err != nil {
+		print_error("Project creation cancelled")
+		return
+	}
+	name = strings.TrimSpace(name)
+
+	descPrompt := promptui.Prompt{Label: "Description (optional)"}
+	description, err := descPrompt.Run()
+	if err != nil {
+		print_error("Project creation cancelled")
+		return
+	}
+
+	typeSelect := promptui.Select{
+		Label: "Project type",
+		Items: []string{"general", "saas"},
+	}
+	_, projectType, err := typeSelect.Run()
+	if err != nil {
+		print_error("Project creation cancelled")
+		return
+	}
+
+	projectID := slugProjectID(name)
+	payload := map[string]interface{}{
+		"name":          name,
+		"description":   strings.TrimSpace(description),
+		"id":            projectID,
+		"project_type":  projectType,
+		"database_type": "sqlite",
+		"db_config": map[string]string{
+			"file": "apito_" + projectID + ".sqlite",
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		print_error(err.Error())
+		return
+	}
+
+	endpoint := strings.TrimSuffix(account.ServerURL, "/") + "/system/project/create"
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		print_error(err.Error())
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		print_error("Create request failed: " + err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		print_error(fmt.Sprintf("Create failed (%s): %s", resp.Status, strings.TrimSpace(string(respBody))))
+		return
+	}
+	print_success(fmt.Sprintf("Project %s created on account %s (%s)", projectID, accountName, account.ServerURL))
+}
+
+func resolveAccountForCreate() (string, error) {
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return "", err
+	}
+	if len(cfg.Accounts) == 0 {
+		print_status("Connect an account before creating a project. The account can be local Studio or cloud.")
+		prompt := promptui.Prompt{Label: "Account name", Validate: func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return fmt.Errorf("name is required")
 			}
-			pathInput = filepath.Join(home, strings.TrimPrefix(pathInput, "~"))
-		}
-		absPath, err := filepath.Abs(pathInput)
+			return nil
+		}}
+		name, err := prompt.Run()
 		if err != nil {
-			print_error("Invalid path: " + err.Error())
-			return
+			return "", fmt.Errorf("account connection cancelled")
 		}
-		if err := os.MkdirAll(absPath, 0755); err != nil {
-			print_error("Could not create directory: " + err.Error())
-			return
+		name = strings.TrimSpace(name)
+		createAccount(name)
+		cfg, err = loadCLIConfig()
+		if err != nil {
+			return "", err
 		}
-		targetDir = absPath
+		if _, ok := cfg.Accounts[name]; !ok {
+			return "", fmt.Errorf("account was not connected")
+		}
+		return name, nil
 	}
-
-	// repo name from URL (e.g. apito-hello-world-go-plugin)
-	repoName := strings.TrimSuffix(filepath.Base(repo), ".git")
-	clonePath := filepath.Join(targetDir, repoName)
-
-	print_status("Cloning " + repo + " into " + clonePath)
-	cmd := exec.Command("git", "clone", repo, clonePath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		print_error("Clone failed: " + err.Error())
-		return
-	}
-	print_success("Plugin scaffold created at " + clonePath)
+	return resolveSyncAccount("create", "")
 }
 
-// removed old project via API flow; console handles project creation now
+func slugProjectID(name string) string {
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevUnderscore = false
+			continue
+		}
+		if !prevUnderscore && b.Len() > 0 {
+			b.WriteByte('_')
+			prevUnderscore = true
+		}
+	}
+	base := strings.Trim(b.String(), "_")
+	if base == "" {
+		base = "project"
+	}
+	suffix := make([]byte, 2)
+	if _, err := rand.Read(suffix); err != nil {
+		return base
+	}
+	return fmt.Sprintf("%s_%x", base, suffix)
+}
