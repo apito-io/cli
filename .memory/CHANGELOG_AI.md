@@ -1,5 +1,11 @@
 # cli — AI Changelog
 
+## 2026-10-18 — public README
+
+- **Changed:** Database list, ports, license sentence, docs URL, and Discord invite in `README.md`.
+- **Why:** The public CLI page still named SQL Server, Firestore, and Fair Source.
+- **Affected:** `README.md` only. Uncommitted. Leave `.memory` out of the public commit.
+
 ## 2026-10-13 — opt-in HTTP MCP
 
 - **Changed:** Added token-free HTTP config and a stdio-to-HTTP bridge. Default `mcp serve` remains the Node runtime.

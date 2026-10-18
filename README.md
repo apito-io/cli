@@ -1,15 +1,43 @@
+# Apito CLI
+
+One Apache-licensed binary for a local engine and Apito Cloud. Cloud-only commands stay in the help text and fail closed until the connected account's server reports the capability.
+
+`apito login` asks the local engine at `http://localhost:5055` for a code, then opens the console at `http://localhost:4055/cli`. Cloud uses `https://api.apito.io` and opens the console URL that server returns. Custom asks for the server URL and an `apt_` token. The token is stored outside `config.yml`. Project keys (`ak_`) are separate and are shown once at creation.
+
+`apito mcp connect` uses the same Local, Cloud, or Custom choice and opens `/mcp`. It stores a separate read-only MCP token. `apito mcp serve` stays a foreground process for Cursor or Claude and does not put that token in the generated client config.
+
+```text
+apito login [name]
+apito account list|select|test|remove
+apito project list|open
+apito key project list|create|revoke
+apito mcp connect [name]
+apito mcp update
+apito mcp config --client cursor|claude
+apito mcp serve
+apito gen --language typescript|go --framework astro|react|none
+apito tenant list|create
+apito client invite|status
+apito backup list|run
+apito restore preview|apply
+```
+
+`apito gen` writes TypeScript/TSX or Go. It does not emit plain JavaScript or Python. `--framework none` writes types and an SDK without React Query hooks. Generated files and `.apito-gen-manifest.json` do not contain tokens. `apito handover` moves a self-hosted project. `apito client` is a Cloud engagement and is separate.
+
+The contract is [`.knowledge/features/cli-contract.md`](.knowledge/features/cli-contract.md).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/apito-io/engine/main/docs/cover-photo.png" alt="Apito Logo" />
 </p>
 
-# Apito CLI
+## Earlier command reference
 
-🚀 **Apito CLI** is a powerful command-line tool for managing projects, plugins, functions, and deployments on the Apito platform. It provides a seamless development experience from local development to cloud deployment with enhanced database management, plugin hot-reload system, and Docker integration.
+The Apito CLI installs and runs a local engine and console, and talks to Apito Cloud. Supported databases are SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB. DynamoDB, Oracle, and Cassandra are coming soon.
 
 <p align="center">
   <a href="https://apito.io"><strong>Website</strong></a> ·
-  <a href="https://docs.apito.io"><strong>Documentation</strong></a> ·
-  <a href="https://discord.com/invite/fwHgF8pUpt"><strong>Discord</strong></a>
+  <a href="https://apito.io/docs"><strong>Documentation</strong></a> ·
+  <a href="https://discord.gg/Xb7p2ddC6E"><strong>Discord</strong></a>
 </p>
 
 ## 📋 Table of Contents
@@ -19,8 +47,6 @@
 - [🎯 Getting Started](#-getting-started)
 - [📚 Command Reference](#-command-reference)
   - [🔧 System Management](#-system-management)
-    - [init](#init---initialize-apito-cli-system)
-    - [init update](#init-update---merge-new-env-keys-into-system-env)
     - [status](#status---show-service-and-database-status)
     - [logs](#logs---view-service-and-database-logs)
   - [👤 Admin](#-admin)
@@ -49,14 +75,14 @@
 - [📄 License](#-license)
 
 <p align="center">
-  <a href="https://github.com/apito-io/engine/blob/main/LICENSE">
+  <a href="https://github.com/apito-io/cli/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
   </a>
   <a href="https://github.com/apito-io/engine/releases">
     <img src="https://img.shields.io/github/v/release/apito-io/cli" alt="Release" />
   </a>
   <a href="https://goreportcard.com/report/github.com/apito-io/cli">
-    <img src="https://img.shields.io/github/v/release/apito-io/cli" alt="Go Report Card" />
+    <img src="https://goreportcard.com/badge/github.com/apito-io/cli" alt="Go Report Card" />
   </a>
   <a href="https://github.com/apito-io/engine/actions">
     <img src="https://github.com/apito-io/engine/workflows/Build%20and%20Release/badge.svg" alt="Build Status" />
@@ -71,7 +97,7 @@
 - **Update Detection**: Checks for new versions every time you run `apito start`
 - **Interactive Updates**: Choose which components to update with a simple prompt
 - **Version Pinning**: Uses specific version tags instead of `:latest` for consistent deployments
-- **Zero-Downtime Updates**: Pull new images and regenerate docker-compose.yml seamlessly
+- **Updates**: Pull new images and regenerate docker-compose.yml
 - **GitHub Integration**: Fetches versions directly from GitHub releases and container registry
 
 ### 🔌 **Plugin Management System**
@@ -87,7 +113,7 @@
 ### ✨ **Enhanced Database Management**
 
 - **Interactive Database Setup**: Choose between default credentials or custom configuration
-- **Multiple Database Support**: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQL Server
+- **Multiple Database Support**: SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB. DynamoDB, Oracle, and Cassandra are coming soon.
 - **Persistent Data Volumes**: Named Docker volumes for data persistence
 - **Configuration Overwrite Protection**: Confirmation prompts before overwriting existing settings
 
@@ -112,7 +138,7 @@
 - **Consistent Command Patterns**: Unified `--db` flag across start, stop, and restart commands
 - **Enhanced Status Monitoring**: Database status display in `apito status` command
 - **Comprehensive Logging**: New `apito logs` command for service and database logs
-- **Admin Password Reset**: `apito admin password reset [email]` with engine URL (default `http://localhost:5050`) and reset-token prompt
+- **Admin Password Reset**: `apito admin password reset [email]` with engine URL (default `http://localhost:5055`) and reset-token prompt
 - **Silent configuration**: if `~/.apito/config.yml` or `~/.apito/bin/.env` is missing, the CLI writes the defaults and prints one warning
 
 ## 📦 Installation
@@ -172,7 +198,7 @@ apito create
 apito start
 ```
 
-This prepares `~/.apito` when the files are missing, pulls `ghcr.io/apito-io/studio`, and runs the `apito-studio` container. The console is at `http://localhost:5055`. The database stays in `~/.apito/db`. `apito stop`, `apito restart`, `apito status`, and `apito logs` talk to that container.
+This prepares `~/.apito` when the files are missing, pulls `ghcr.io/apito-io/studio`, and runs the `apito-studio` container. The console is at `http://localhost:4055`. The engine is at `http://localhost:5055`. The database stays in `~/.apito/db`. `apito stop`, `apito restart`, `apito status`, and `apito logs` talk to that container.
 
 ## 📚 Command Reference
 
@@ -199,7 +225,7 @@ A remote destination needs `--allow-push` and a second confirmation.
 ```
 
 **Default Configuration:**
-The first run writes `~/.apito/bin/.env.engine` and `~/.apito/bin/.env.console`. The engine file points the database at `/data` inside the container, which is the `~/.apito/db` volume. `BRANKA_KEY` is a generated 32-character key. An existing key is kept. The engine listens on port `5051` inside the container. The console file points the UI at `http://localhost:5055`. The first start prints `oss@apito.io` and a random admin password. Later starts keep that password.
+The first run writes `~/.apito/bin/.env.engine` and `~/.apito/bin/.env.console`. The engine file points the database at `/data` inside the container, which is the `~/.apito/db` volume. `BRANKA_KEY` is a generated 32-character key. An existing key is kept. The engine listens on port `5055` inside the container. Nginx listens on `4055` and proxies API paths to that engine port. The console file points the UI at `http://localhost:4055`. The first start prints `oss@apito.io` and a random admin password. Later starts keep that password.
 
 **BRANKA_KEY Behavior:**
 
@@ -222,11 +248,11 @@ apito admin password reset -u <engine-url> [email]
 
 **Options:**
 
-- `--url, -u` - Engine/API base URL. If omitted, you are prompted; default is `http://localhost:5050`.
+- `--url, -u` - Engine/API base URL. If omitted, you are prompted; default is `http://localhost:5055`.
 
 **Flow:**
 
-1. **Engine URL** – From `-u`/`--url`, or prompt (default `http://localhost:5050`).
+1. **Engine URL** – From `-u`/`--url`, or prompt (default `http://localhost:5055`).
 2. **Email** – From argument or prompt.
 3. **Reset token** – Prompt: paste the admin reset secret (same value as `APITO_ADMIN_RESET_SECRET` in the engine’s `.env`).
 4. **Confirm** – Confirm reset for the given email.
@@ -235,7 +261,7 @@ apito admin password reset -u <engine-url> [email]
 **Examples:**
 
 ```bash
-# Interactive: URL prompt (default localhost:5050), then email, token, password
+# Interactive: URL prompt (default localhost:5055), then email, token, password
 apito admin password reset
 
 # With email on the command line
@@ -262,7 +288,7 @@ apito status [engine|console]
 - **Service Status**: Shows running status for engine and console services
 - **Database Status**: Automatically displays database container status when `db-compose.yml` exists
 - **Real-time Information**: Shows current running/stopped status for all containers
-- **Docker Integration**: Works seamlessly with Docker and local service modes
+- **Docker Integration**: Works with Docker and local service modes
 - **Automatic Detection**: Automatically detects and shows database status without additional flags
 
 **Examples:**
@@ -308,7 +334,7 @@ apito logs [engine|console] [--db system|project] [--follow] [--tail N]
 - **Database Logs**: View logs for system and project databases
 - **Real-time Following**: Follow logs as they happen with `--follow` flag
 - **Tail Control**: Control how many log lines to show with `--tail` flag
-- **Docker & Local Support**: Works seamlessly in both Docker and local service modes
+- **Docker & Local Support**: Works in both Docker and local service modes
 - **Automatic Container Detection**: Automatically finds the correct container for database logs
 
 **Examples:**
@@ -355,7 +381,7 @@ apito start --db project  # Start project database
 
 **Features:**
 
-- **Interactive Database Selection**: Choose from PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQL Server
+- **Interactive Database Selection**: SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB. DynamoDB, Oracle, and Cassandra are coming soon.
 - **Credential Options**: Use default credentials or enter custom configuration
 - **Smart Configuration**: Automatic detection of existing database settings
 - **Overwrite Protection**: Confirmation prompts before overwriting existing configuration
@@ -367,9 +393,9 @@ apito start --db project  # Start project database
 - **PostgreSQL** (port 5432) - Professional-grade relational database
 - **MySQL** (port 3306) - Popular open-source database
 - **MariaDB** (port 3307) - MySQL fork with enhanced features
-- **MongoDB** (port 27017) - Document-based NoSQL database
-- **Redis** (port 6379) - In-memory key-value store
-- **SQL Server** (port 1433) - Microsoft's enterprise database
+- **MongoDB** (port 27017)
+
+DynamoDB, Oracle, and Cassandra are coming soon.
 
 **Configuration Options:**
 
@@ -589,7 +615,7 @@ apito config set -a production key prod-key-123
 apito config set -a staging url https://staging-api.apito.io
 apito config set -a staging key staging-key-456
 
-apito config set -a local url http://localhost:5050
+apito config set -a local url http://localhost:5055
 apito config set -a local key local-key-789
 
 # Method B: Interactive selection (shows menu)
@@ -923,7 +949,7 @@ The CLI now provides comprehensive visibility into your Apito infrastructure:
 
 #### **Comprehensive Logging System**
 
-Access logs for all components with powerful filtering and real-time capabilities:
+Access logs for all components:
 
 - **Service Logs**: Engine and console application logs
 - **Database Logs**: Database container logs with engine-specific formatting
@@ -991,15 +1017,13 @@ apito create <resource> [options]
 
 **Database Options:**
 
-- **Embed & SQL** (mdi:database) - Default embedded database
-- **MySQL** (logos:mysql) - MySQL database
-- **MariaDB** (logos:mariadb) - MariaDB database
-- **PostgreSQL** (logos:postgresql) - PostgreSQL database
-- **Couchbase** (logos:couchbase) - Couchbase database
-- **Oracle** (logos:oracle) - Oracle database
-- **Firestore** (logos:firebase) - Firebase Firestore
-- **MongoDB** (logos:mongodb) - MongoDB database
-- **DynamoDB** (logos:aws-dynamodb) - AWS DynamoDB
+- **SQLite** - default embedded database
+- **MySQL**
+- **MariaDB**
+- **PostgreSQL**
+- **MongoDB**
+
+DynamoDB, Oracle, and Cassandra are coming soon.
 
 **Examples:**
 
@@ -1068,8 +1092,8 @@ apito start --db project
 
 **Access URLs:**
 
-- **Engine API**: http://localhost:5050
-- **Console UI**: http://localhost:4000
+- **Engine API**: http://localhost:5055
+- **Console UI**: http://localhost:4055
 
 **System Requirements:**
 
@@ -1253,10 +1277,10 @@ The CLI manages engine configuration in `~/.apito/bin/.env`:
 
 - `ENVIRONMENT` - local/development/staging/production
 - `COOKIE_DOMAIN` - e.g., localhost
-- `CORS_ORIGIN` - e.g., http://localhost:4000
+- `CORS_ORIGIN` - e.g., http://localhost:4055
 - `BRANKA_KEY` - Generated secret key
 - `APITO_ADMIN_RESET_SECRET` - Secret for admin password reset (used when running `apito admin password reset`; paste this when prompted for "reset token")
-- `APITO_SYSTEM_DB_ENGINE` - embed, postgres, mysql, mariadb, mongodb, redis, sqlserver
+- `APITO_SYSTEM_DB_ENGINE` - sqlite, postgres, mysql, mariadb, mongodb
 - `SYSTEM_DB_HOST` - System database host
 - `SYSTEM_DB_PORT` - System database port
 - `SYSTEM_DB_NAME` - System database name
@@ -1266,7 +1290,7 @@ The CLI manages engine configuration in `~/.apito/bin/.env`:
 
 #### **Project Configuration:**
 
-- `APITO_PROJECT_DB_ENGINE` - postgres, mysql, mariadb, mongodb, redis, sqlserver
+- `APITO_PROJECT_DB_ENGINE` - sqlite, postgres, mysql, mariadb, mongodb
 - `PROJECT_DB_HOST` - Project database host
 - `PROJECT_DB_PORT` - Project database port
 - `PROJECT_DB_NAME` - Project database name
@@ -1276,7 +1300,7 @@ The CLI manages engine configuration in `~/.apito/bin/.env`:
 
 #### **Service Configuration:**
 
-- `SERVE_PORT` - Engine port (default 5050)
+- `SERVE_PORT` - Engine port (default 5055)
 - `CACHE_*`, `KV_ENGINE`, `AUTH_SERVICE_PROVIDER`, `TOKEN_TTL`
 - `CADDY_PATH` - Absolute path to caddy (managed by CLI)
 
@@ -1284,13 +1308,17 @@ The CLI manages engine configuration in `~/.apito/bin/.env`:
 
 #### **System Database:**
 
-- **Embedded**: boltDB (default)
-- **External**: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQL Server
+- **Embedded**: SQLite
+- **External**: PostgreSQL, MySQL, MariaDB, MongoDB
+
+DynamoDB, Oracle, and Cassandra are coming soon.
 
 #### **Project Database:**
 
-- **External**: PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQL Server
-- **Cloud**: Firestore (alpha), DynamoDB (alpha)
+- **Embedded**: SQLite
+- **External**: PostgreSQL, MySQL, MariaDB, MongoDB
+
+DynamoDB, Oracle, and Cassandra are coming soon.
 
 ### Docker Integration
 
@@ -1602,7 +1630,7 @@ apito plugin deploy                 # Deploy to production (uses default, requir
 ## 🔗 Useful Links
 
 - **Apito Platform**: https://app.apito.io
-- **Documentation**: https://docs.apito.io
+- **Documentation**: https://apito.io/docs
 - **GitHub**: https://github.com/apito-io/cli
 - **Support**: https://github.com/apito-io/cli/issues
 
@@ -1626,7 +1654,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details. The engine and console are Fair Source (FSL-1.1-ALv2) and convert to Apache 2.0 two years after each release. This CLI is Apache 2.0 now.
+This CLI is licensed under Apache 2.0 (see LICENSE). The engine, console and Studio are AGPL-3.0.
 
 ---
 

@@ -1,5 +1,11 @@
 # CLI — Handoff
 
+## README license and database copy (2026-10-18)
+
+- **Done:** README only. Apache badge points at this repo's LICENSE. Discord is `https://discord.gg/Xb7p2ddC6E`.
+- **Not done:** No commit or push.
+- **Do not:** Include `.memory` in the public diff. Do not document `apito mcp connect`. `./command.sh save` until asked.
+
 ## HTTP MCP (2026-10-13)
 
 HTTP config and the stdio bridge are in `mcp_http.go`. They do not replace `mcp connect` or the default Node `mcp serve`. Contract: `/.knowledge/features/remote-mcp-oauth.md`.

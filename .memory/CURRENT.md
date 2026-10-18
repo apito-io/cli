@@ -1,5 +1,9 @@
 # CLI — Current
 
+## Now (2026-10-18) — README copy only
+
+The README lists SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB, with DynamoDB, Oracle, and Cassandra coming soon. Local URLs are console `4055` and engine `5055`. The license line is Apache-2.0 for the CLI and AGPL-3.0 for engine, console, and Studio. No CLI code changed. Uncommitted. Leave `.memory` out of the public commit. Ask before `./command.sh save`.
+
 ## Now (2026-10-13) — HTTP MCP is opt-in
 
 `apito mcp config --transport http` prints `{ "type": "http", "url": "…" }` with no token. The host picks Cloud, local `http://localhost:4055/mcp`, or the custom origin. `apito mcp serve --transport http` exchanges the stored `apt_` grant for `mct_` and forwards Content-Length frames. Default serve still requires Node. `APITO_MCP_RUNTIME=node` forces that runtime. `go test` covered endpoint resolution, token-free config, the bridge, and the existing stdio edition test. Uncommitted. Ask before `./command.sh save`.
