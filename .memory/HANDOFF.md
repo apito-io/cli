@@ -1,5 +1,11 @@
 # CLI — Handoff
 
+## Cloud HTTP MCP URL (2026-10-18)
+
+- **Done:** `resolveMCPHTTPTarget` and the no-account HTTP fallback use `https://api.apito.io/mcp`. Tests passed.
+- **Not done:** No CLI release.
+- **Do not:** Put tokens in the HTTP config. `./command.sh save` until asked.
+
 ## README license and database copy (2026-10-18)
 
 - **Done:** README only. Apache badge points at this repo's LICENSE. Discord is `https://discord.gg/Xb7p2ddC6E`.

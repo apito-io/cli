@@ -1,5 +1,9 @@
 # CLI — Current
 
+## Now (2026-10-18) — Cloud HTTP MCP URL
+
+`apito mcp config --transport http` for a Cloud account prints `https://api.apito.io/mcp`. The token URL is `https://api.apito.io/oauth/token`. Uncommitted. Ask before `./command.sh save`.
+
 ## Now (2026-10-18) — README copy only
 
 The README lists SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB, with DynamoDB, Oracle, and Cassandra coming soon. Local URLs are console `4055` and engine `5055`. The license line is Apache-2.0 for the CLI and AGPL-3.0 for engine, console, and Studio. No CLI code changed. Uncommitted. Leave `.memory` out of the public commit. Ask before `./command.sh save`.

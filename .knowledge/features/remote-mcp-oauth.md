@@ -15,7 +15,7 @@ A remote MCP client configures an Apito URL and completes the existing Console a
 
 ## Contract
 
-- Cloud: `https://mcp.apito.io/mcp`
+- Cloud: `https://api.apito.io/mcp`. `https://mcp.apito.io/mcp` is still recognized as Cloud, and it is not the live host.
 - Local Studio: `http://localhost:4055/mcp`, proxied to engine `5055`
 - Custom: the account origin plus `/mcp`
 - The host selects the deployment. `kind` does not change the OAuth resource.

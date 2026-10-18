@@ -1,5 +1,11 @@
 # cli — AI Changelog
 
+## 2026-10-18 — Cloud MCP HTTP URL
+
+- **Changed:** Cloud HTTP config and token exchange use `https://api.apito.io/mcp` and `https://api.apito.io/oauth/token`.
+- **Why:** `mcp.apito.io` does not resolve. Production advertises `MCP_PUBLIC_URL=https://api.apito.io`.
+- **Affected:** `mcp_http.go`, `mcp_cmd.go`. Uncommitted. Ask before `./command.sh save`.
+
 ## 2026-10-18 — public README
 
 - **Changed:** Database list, ports, license sentence, docs URL, and Discord invite in `README.md`.
