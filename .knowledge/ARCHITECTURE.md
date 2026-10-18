@@ -4,38 +4,41 @@ Distilled from root `ARCHITECTURE.md` and the Go cobra codebase.
 
 ## Overview
 
-**Apito CLI** (`apito` binary) is the local operator tool for Apito: manage accounts, start/stop engine+console, sync schema/content between projects, build/deploy plugins, self-upgrade, and run admin ops. It talks to engine **system GraphQL** and REST using per-account `ServerURL` + access tokens (`cli-` prefix).
+**Apito CLI** (`apito` binary) is one Apache-licensed tool for a local engine and Apito Cloud. It manages accounts, local Studio, schema sync, plugins, codegen, and MCP. Cloud-only commands stay visible and fail closed until the server reports the capability. Account tokens are `apt_`. Project keys are `ak_`.
 
 ## Command surface
 
 | Area | Commands |
 |------|----------|
-| Lifecycle | `init`, `start`, `stop`, `restart`, `status`, `logs` |
-| Accounts | `account`, `config` |
-| Projects/plugins | `create`, `plugin build|deploy|…`, `build` |
-| Sync | `sync` (schema or content, draft-aware on pro) |
-| Maintenance | `update`, `self-upgrade`, `admin` |
+| Accounts | `login`, `account list|select|test|remove|add local` |
+| Projects and keys | `project list|open`, `key project list|create|revoke` |
+| Codegen and MCP | `gen` / `types`, `mcp config|serve` |
+| Cloud-gated | `tenant list|create`, `client invite|status`, `backup list|run`, `restore preview|apply` |
+| Local Studio | `start`, `stop`, `restart`, `status`, `logs` |
+| Sync and migration | `sync`, `migrate`, `handover` |
+| Plugins | `plugin`, `create` |
 
-Go **1.25+**, cobra + survey/promptui for interactive flags.
+Go **1.25+**, cobra. Global selectors are `--account`, `--project`, and `--tenant`.
 
 ## Key components
 
-- **`config.go`** — YAML config: accounts, default account, timeouts, cloud sync keys.
-- **`service_manager.go` / `docker_manager.go`** — local engine/console process orchestration.
-- **`sync*.go`** — GraphQL clients, schema diff/merge/apply, content sync.
-- **`plugin_build.go` / `plugin_deploy.go`** — cross-platform plugin artifacts + deploy.
-- **`version_manager.go` / `self_upgrade.go`** — engine/console/CLI version pins.
-- **`create.go` / `admin.go`** — scaffolding and operator commands.
+- **`system_client.go` / `capabilities.go`** — HTTP and GraphQL, plus capability discovery. `/system/health` is connectivity only.
+- **`credentials.go` / `config.go`** — named accounts. The access token is not written to `config.yml`.
+- **`login.go`** — device login for Cloud and a prompted token for a local URL.
+- **`gen_cmd.go`** — stages TypeScript or Go output and records a credential-free manifest.
+- **`sync*.go`** — schema and content sync on top of `SystemClient`.
 
 ## Sync architecture (high level)
 
 ```
 accounts (from/to) → select projects → validate profiles
-  → schema: introspect/diff/plan/apply (stages drafts on pro)
+  → schema: introspect/diff/plan/apply (stages drafts when the server supports staging)
   → content: model data copy with relation awareness
 ```
 
-Uses `/system/graphql` with access tokens; schema writes on pro engines stage drafts — publish from Console.
+Schema writes stage a draft when the server has schema staging. Publish stays in the console.
+
+Last Updated: 2026-10-12
 
 ## Plugin build flow
 

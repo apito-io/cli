@@ -1,7 +1,44 @@
 # cli — AI Changelog
 
+## 2026-10-13 — opt-in HTTP MCP
+
+- **Changed:** Added token-free HTTP config and a stdio-to-HTTP bridge. Default `mcp serve` remains the Node runtime.
+- **Why:** Remote clients should receive a URL, while existing stdio installs keep working.
+- **Affected:** `mcp_cmd.go`, `mcp_http.go`, `mcp_http_test.go`, `.knowledge/features/remote-mcp-oauth.md`. Targeted `go test` passed. Uncommitted.
+
+
+
 Not git history — the _reasoning_ behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
+
+---
+## 2026-10-13 — remote MCP URL/OAuth plan
+
+- **Changed:** Refined token-free HTTP MCP configuration for Cloud, local Studio, and Apito-compatible custom hosts to use clean named client entries, a Go engine MCP route, and a Go stdio-to-HTTP bridge. `kind` is inferred from the endpoint; the Node runtime is only a temporary rollback path.
+- **Why:** MCP clients should accept one URL like PostHog while the CLI keeps using the existing `mcp_assistant` token approval and stdio flow.
+- **Affected:** Planning only; no CLI code changed in this pass. Proposed URLs are `https://mcp.apito.io/mcp` and `http://localhost:4055/mcp`. Ask before implementation or `./command.sh save`.
+
+---
+## 2026-10-13 — MCP connect
+
+- **Changed:** `mcp connect` follows Local, Cloud, or Custom and stores the MCP secret in `mcp_accounts` or keychain service `apito-cli-mcp`. `mcp update` verifies a release archive into `~/.apito/mcp/versions/<version>`. `mcp serve` uses that bundle, the MCP token, and a fail-closed project. Local Studio env is engine `5055` and console `4055`.
+- **Why:** The MCP token has a different capability set from the CLI token, and Cursor must launch a foreground stdio process that does not embed the secret.
+- **Affected:** `mcp_connect.go`, `mcp_cmd.go`, `mcp_runtime.go`, `credentials.go`, `config.go`, `studio-oss` nginx via the CLI's published ports. `go test ./...` passed. Uncommitted. Ask before `./command.sh save`.
+
+---
+
+## 2026-10-12 — unified CLI contract and tests
+
+- **Changed:** Capability discovery calls the access-token catalog and self endpoint. `account test` caches capabilities. Key revoke accepts a token id argument, and create can write the new `ak_` secret to an env file only with `--yes`. Gen dry-run can show `general`, `saas-shared`, or `saas-per-tenant`. Fake-server tests cover login expiry, fail-closed Cloud commands, restore disabled, MCP edition, and codegen artifact/module selection. README, architecture, and `features/cli-contract.md` document the contract.
+- **Why:** The public CLI needs one written boundary and tests that prove Cloud commands do not fall through to private GraphQL.
+- **Affected:** `capabilities.go`, `config.go`, `key_cmd.go`, `gen_cmd.go`, `cli_unified_test.go`, `README.md`, `.knowledge/`. `go test ./...` passed. Uncommitted. Ask before `./command.sh save`.
+
+---
+## 2026-10-12 — unified CLI commands
+
+- **Changed:** Named accounts keep the `apt_` token out of `config.yml`. Login, project, key, MCP, gen, tenant, client, backup, and restore commands share one account resolver. Missing Cloud capabilities fail closed.
+- **Why:** One Apache CLI has to talk to a local engine and to Apito Cloud without copying private host code or printing secrets into MCP config and generated files.
+- **Affected:** `system_client.go`, `credentials.go`, `capabilities.go`, `login.go`, `project_cmd.go`, `key_cmd.go`, `mcp_cmd.go`, `gen_cmd.go`, `tenant_cmd.go`, `cloud_cmd.go`, `config.go`. Uncommitted. Not tagged. Ask before `./command.sh save`.
 
 ---
 ## 2026-10-11 — Fair Source user strings

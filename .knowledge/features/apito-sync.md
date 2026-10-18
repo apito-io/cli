@@ -11,7 +11,7 @@ timestamp: 2026-07-16T00:00:00Z
 
 ## Purpose
 
-`apito sync` copies **schema** (models, fields, relations), **functions** (Logic function draft source + metadata), or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. On pro engines, schema applies as **drafts** — publish from Console. **CLI never publishes schema.**
+`apito sync` copies **schema** (models, fields, relations), **functions** (Logic function draft source + metadata), or **content** (model rows) between two configured accounts/projects using system GraphQL and access tokens. When the server supports schema staging, schema applies as **drafts** — publish from Console. **CLI never publishes schema.**
 
 ## Flows
 
@@ -103,7 +103,7 @@ Function definitions are tenant-agnostic — for SaaS, pass a tenant at invoke/t
 
 - Missing account or token → configure via `apito config` / account create.
 - Picking a project not in token `project_ids` → clear error after select (regenerate token with that project).
-- Destination pro engine: forgetting Console publish after sync → API still on old schema.
+- Destination with schema staging: forgetting Console publish after sync → API still on old schema.
 - Content sync without schema parity → relation FK violations.
 
 ## Tests

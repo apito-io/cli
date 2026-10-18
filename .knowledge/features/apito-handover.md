@@ -1,7 +1,7 @@
 ---
 type: feature
 title: Apito handover CLI
-description: Resumable self-host Enterprise to Apito Cloud infrastructure migration
+description: Resumable self-hosted project migration onto managed Apito Cloud
 resource: cli/handover.go
 tags: [cli, migration]
 timestamp: 2026-09-06T00:00:00Z

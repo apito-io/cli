@@ -7,13 +7,13 @@ Part of the **apito** ecosystem. See `/.knowledge/projects/apito.md` for how thi
 
 ## Purpose
 
-**Apito CLI** (`apito` binary): local operator tool for accounts, start/stop engine+console, schema/content sync, plugin build/deploy, self-upgrade, and admin ops. Uses system GraphQL/REST with per-account access tokens.
+**Apito CLI** (`apito` binary): one Apache-licensed client for a local engine and Apito Cloud. See [features/cli-contract.md](features/cli-contract.md).
 
 ## Responsibilities
 
 - Account + YAML config management (`config.go`)
 - Local service orchestration (`start`, `stop`, `status`, `logs`)
-- Cross-account sync (`sync` — schema drafts on pro engines)
+- Cross-account sync (`sync` — schema drafts when the server supports staging)
 - Plugin build/deploy pipeline
 - Version pins and self-upgrade
 
@@ -30,4 +30,4 @@ Part of the **apito** ecosystem. See `/.knowledge/projects/apito.md` for how thi
 - Root `ARCHITECTURE.md` (detailed command flows)
 - Historical Cursor plans distilled into this knowledge base live in `archive/plans/`.
 
-Last Updated: 2026-07-07
+Last Updated: 2026-10-12
