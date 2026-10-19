@@ -24,7 +24,7 @@ var startWithDB bool
 var startCmd = &cobra.Command{
 	Use:   "start [--db system|project]",
 	Short: "Start the public Studio image",
-	Long:  `Prepare ~/.apito on first run, then pull and run ghcr.io/apito-io/studio. The first run writes config.yml, .env.engine, and .env.console, generates the engine key and signing keys, and continues. The container mounts those files and stores the database in ~/.apito/db. The console is at http://localhost:5055. The image tag comes from studio_version in ~/.apito/config.yml, or the latest published tag when that field is empty.`,
+	Long:  `Prepare ~/.apito on first run, then pull and run ghcr.io/apito-io/studio. The first run writes config.yml, .env.engine, and .env.console, generates the engine key and signing keys, and continues. The container mounts those files and stores the database in ~/.apito/db. The console is at http://localhost:4055. The engine is at http://localhost:5055. The image tag comes from studio_version in ~/.apito/config.yml, or the latest published tag when that field is empty.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		dbType, _ := cmd.Flags().GetString("db")
 		if dbType != "" {

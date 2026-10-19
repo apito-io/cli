@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"os"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"net/http"
+	"os"
 )
 
 func init() {

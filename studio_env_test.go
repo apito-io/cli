@@ -39,7 +39,7 @@ func TestEnsureStudioFilesLinksEnvVolumeAndKeys(t *testing.T) {
 	if engine["BRANKA_KEY"] != legacyKey {
 		t.Fatalf("BRANKA_KEY was replaced")
 	}
-	if engine["SERVE_PORT"] != "5051" {
+	if engine["SERVE_PORT"] != "5055" {
 		t.Fatalf("SERVE_PORT = %q", engine["SERVE_PORT"])
 	}
 	if engine["DEFAULT_DATABASE_DIR"] != "/data" || engine["SQLITE_DATA_DIR"] != "/data" {
@@ -60,7 +60,7 @@ func TestEnsureStudioFilesLinksEnvVolumeAndKeys(t *testing.T) {
 	if len(engine["BOOTSTRAP_ADMIN_PASSWORD"]) != 20 {
 		t.Fatalf("BOOTSTRAP_ADMIN_PASSWORD length = %d", len(engine["BOOTSTRAP_ADMIN_PASSWORD"]))
 	}
-	if engine["CORS_ORIGIN"] != "http://localhost:5055" {
+	if engine["CORS_ORIGIN"] != "http://localhost:4055" {
 		t.Fatalf("CORS_ORIGIN = %q", engine["CORS_ORIGIN"])
 	}
 	if strings.TrimSpace(engine["APITO_ADMIN_RESET_SECRET"]) == "" {
@@ -71,7 +71,7 @@ func TestEnsureStudioFilesLinksEnvVolumeAndKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mirror["BRANKA_KEY"] != legacyKey || mirror["SERVE_PORT"] != "5051" {
+	if mirror["BRANKA_KEY"] != legacyKey || mirror["SERVE_PORT"] != "5055" {
 		t.Fatal("legacy .env was not kept in sync with .env.engine")
 	}
 
@@ -79,10 +79,10 @@ func TestEnsureStudioFilesLinksEnvVolumeAndKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if console["VITE_REST_API"] != "http://localhost:5055" {
+	if console["VITE_REST_API"] != "http://localhost:4055" {
 		t.Fatalf("console rest api = %q", console["VITE_REST_API"])
 	}
-	if console["VITE_GRAPH_API"] != "http://localhost:5055/system/graphql" {
+	if console["VITE_GRAPH_API"] != "http://localhost:4055/system/graphql" {
 		t.Fatalf("console graph api = %q", console["VITE_GRAPH_API"])
 	}
 

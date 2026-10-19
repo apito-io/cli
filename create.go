@@ -99,7 +99,7 @@ func createProject() {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+account.Token())
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {

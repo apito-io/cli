@@ -20,7 +20,7 @@ const (
 )
 
 // studioLinkedKeys are rewritten on every start so the env files match the
-// Studio container: nginx on 5055, engine on 5051, database on /data.
+// Studio container: nginx on 4055, engine on 5055, database on /data.
 var studioLinkedKeys = []string{
 	"COOKIE_DOMAIN",
 	"CORS_ORIGIN",

@@ -392,7 +392,7 @@ func runLocalSchemaSync(fromName, toName string, timeout int, dryRun, autoYes, i
 	if err != nil {
 		return err
 	}
-	base := newSyncGraphQLClient(remoteCfg.ServerURL, remoteCfg.CloudSyncKey, timeout)
+	base := newSyncGraphQLClient(remoteCfg.ServerURL, remoteCfg.Token(), timeout)
 	var project SyncProject
 	if preselectedRemote != nil && strings.TrimSpace(preselectedRemote.ID) != "" {
 		project = *preselectedRemote

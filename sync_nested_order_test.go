@@ -222,8 +222,8 @@ func TestValidateSyncModels_CleanPasses(t *testing.T) {
 			SubFieldInfo: []SyncField{
 				{Identifier: "test_id", FieldType: "text", ParentField: "tests"},
 				{
-					Identifier: "test_label_results",
-					FieldType:  "repeated",
+					Identifier:  "test_label_results",
+					FieldType:   "repeated",
 					ParentField: "tests",
 					SubFieldInfo: []SyncField{
 						{Identifier: "label_id", FieldType: "text", ParentField: "test_label_results"},

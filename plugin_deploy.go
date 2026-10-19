@@ -508,7 +508,7 @@ func listPlugins(accountName string) {
 	print_status("")
 
 	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
+	cloudSyncKey := account.Token()
 
 	// Make API request
 	req, err := http.NewRequest("GET", serverURL+"/system/plugin", nil)
@@ -588,7 +588,7 @@ func getPluginStatus(pluginID, accountName string) {
 	}
 
 	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
+	cloudSyncKey := account.Token()
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
 	if err != nil {
@@ -799,7 +799,7 @@ func controlPlugin(pluginID, action, accountName string) {
 	}
 
 	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
+	cloudSyncKey := account.Token()
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/system/plugin/%s/%s", serverURL, pluginID, action), nil)
 	if err != nil {
@@ -883,7 +883,7 @@ func performPluginDeleteRequest(pluginID, accountName string) (int, []byte, erro
 	}
 
 	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
+	cloudSyncKey := account.Token()
 
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/system/plugin/%s", serverURL, pluginID), nil)
 	if err != nil {
@@ -1277,7 +1277,7 @@ func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, plu
 	}
 
 	serverURL := account.ServerURL
-	cloudSyncKey := account.CloudSyncKey
+	cloudSyncKey := account.Token()
 
 	// Validate platform compatibility before deployment
 	if err := validatePlatformCompatibility(pluginDir, config, serverURL, cloudSyncKey); err != nil {

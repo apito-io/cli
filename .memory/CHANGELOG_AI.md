@@ -1,5 +1,17 @@
 # cli — AI Changelog
 
+## 2026-10-19 — CLI v0.5.0
+
+- **Changed:** Release the unified CLI: browser login, `apito types` / `apito gen`, MCP connect, and capability-gated project, key, tenant, backup, and restore commands. Login stores `cli_login` (`projects.read` and `schema.read`). Type generation reads published schema and refuses credential output.
+- **Why:** Suchok and the other apps should generate types from the installed CLI, and a stolen login token must not read tenant documents or change the system.
+- **Affected:** CLI `main`. Tag **v0.5.0**. Needs an engine that mints `cli_login` and allows pure `__schema` / `__type` queries with `schema.read`.
+
+## 2026-10-19 — Low-harm login contract
+
+- **Changed:** Documented that `apito login` mints `cli_login` and that type generation uses schema introspection without `data.read`.
+- **Why:** A stolen login token must not read tenant documents or change the system.
+- **Affected:** `cli/.knowledge/features/cli-contract.md`. Uncommitted. Ask before `./command.sh save`.
+
 ## 2026-10-18 — Cloud MCP HTTP URL
 
 - **Changed:** Cloud HTTP config and token exchange use `https://api.apito.io/mcp` and `https://api.apito.io/oauth/token`.

@@ -66,7 +66,7 @@ func addPlugin(pluginNameOrURL, accountName string) {
 		print_error(err.Error())
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+account.Token())
 	req.Header.Set("X-Use-Cookies", "false")
 	req.Header.Set("Content-Type", "application/json")
 

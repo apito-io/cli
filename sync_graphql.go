@@ -1,13 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 )
 
 const (
@@ -16,12 +12,9 @@ const (
 	headerUseCookies     = "X-Use-Cookies"
 )
 
+// SyncGraphQLClient is the schema/content sync API on top of SystemClient.
 type SyncGraphQLClient struct {
-	endpoint  string
-	token     string
-	projectID string
-	tenantID  string
-	timeout   time.Duration
+	SystemClient
 }
 
 type SyncProject struct {
@@ -164,102 +157,31 @@ type graphqlResponse struct {
 }
 
 func newSyncGraphQLClient(serverURL, token string, timeoutSec int) *SyncGraphQLClient {
-	base := strings.TrimSuffix(strings.TrimSpace(serverURL), "/")
-	endpoint := base + "/system/graphql"
-	if timeoutSec <= 0 {
-		timeoutSec = 30
-	}
-	return &SyncGraphQLClient{
-		endpoint: endpoint,
-		token:    strings.TrimSpace(token),
-		timeout:  time.Duration(timeoutSec) * time.Second,
-	}
-}
-
-func (c *SyncGraphQLClient) baseURL() string {
-	return strings.TrimSuffix(c.endpoint, "/system/graphql")
-}
-
-func (c *SyncGraphQLClient) graphqlEndpoint() string {
-	return c.endpoint
+	return &SyncGraphQLClient{SystemClient: *newSystemClient(serverURL, token, timeoutSec)}
 }
 
 func (c *SyncGraphQLClient) WithProject(projectID string) *SyncGraphQLClient {
+	if c == nil {
+		return nil
+	}
 	clone := *c
-	clone.projectID = strings.TrimSpace(projectID)
+	clone.SystemClient = *c.SystemClient.WithProject(projectID)
 	return &clone
 }
 
 func (c *SyncGraphQLClient) WithTenant(tenantID string) *SyncGraphQLClient {
-	clone := *c
-	clone.tenantID = strings.TrimSpace(tenantID)
-	return &clone
-}
-
-func (c *SyncGraphQLClient) execute(query string, variables map[string]interface{}, dest interface{}) error {
-	body, err := json.Marshal(graphqlRequest{Query: query, Variables: variables})
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, c.endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	c.setAuthHeaders(req)
-
-	client := &http.Client{Timeout: c.timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("graphql HTTP %d: %s", resp.StatusCode, string(raw))
-	}
-
-	var gqlResp graphqlResponse
-	if err := json.Unmarshal(raw, &gqlResp); err != nil {
-		return err
-	}
-	if len(gqlResp.Errors) > 0 {
-		msgs := make([]string, 0, len(gqlResp.Errors))
-		for _, e := range gqlResp.Errors {
-			msgs = append(msgs, e.Message)
-		}
-		return fmt.Errorf("graphql errors: %s", strings.Join(msgs, "; "))
-	}
-	if dest == nil {
+	if c == nil {
 		return nil
 	}
-	return json.Unmarshal(gqlResp.Data, dest)
-}
-
-// setAuthHeaders sends the unified apt_ access token as a standard bearer
-// credential. X-Use-Cookies: false tells the engine this is a headless API
-// call (no browser session cookies), and X-Apito-Project-Id scopes the
-// request to the selected project within the token's project_ids grant.
-func (c *SyncGraphQLClient) setAuthHeaders(req *http.Request) {
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set(headerUseCookies, "false")
-	if c.projectID != "" {
-		req.Header.Set(headerApitoProjectID, c.projectID)
-	}
-	if c.tenantID != "" {
-		req.Header.Set(headerApitoTenantID, c.tenantID)
-	}
+	clone := *c
+	clone.SystemClient = *c.SystemClient.WithTenant(tenantID)
+	return &clone
 }
 
 func (c *SyncGraphQLClient) ListProjects() ([]SyncProject, error) {
 	projects, err := c.listProjectsQuery(true)
 	if err != nil {
-		// OSS engines may not expose pro-only project fields.
+		// Some servers omit optional project profile fields.
 		if fallback, fbErr := c.listProjectsQuery(false); fbErr == nil {
 			return fallback, nil
 		}

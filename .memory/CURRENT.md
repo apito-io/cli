@@ -1,5 +1,9 @@
 # CLI — Current
 
+## Now (2026-10-19) — CLI v0.5.0
+
+Tagged **v0.5.0**. `apito login` stores a `cli_login` token that reads the project list and published schema. `apito types` generates from that schema. `cli_sync` remains the explicit sync preset. Needs an engine that mints `cli_login` and allows pure introspection with `schema.read`.
+
 ## Now (2026-10-18) — Cloud HTTP MCP URL
 
 `apito mcp config --transport http` for a Cloud account prints `https://api.apito.io/mcp`. The token URL is `https://api.apito.io/oauth/token`. Uncommitted. Ask before `./command.sh save`.

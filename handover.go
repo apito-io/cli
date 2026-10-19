@@ -36,8 +36,10 @@ type handoverJobFile struct {
 
 var handoverCmd = &cobra.Command{
 	Use:   "handover",
-	Short: "Self-host Enterprise → Apito Cloud infrastructure migration",
-	Long: `Resumable export/import for moving a self-hosted project onto Apito Cloud.
+	Short: "Move a self-hosted project to managed Apito Cloud",
+	Long: `Resumable export/import for moving a self-hosted project onto managed Apito Cloud.
+
+This is separate from apito client, which manages a Cloud client engagement.
 
 Cloud → Cloud ownership change does NOT use this CLI. That path is in-place
 (moveProjectToWorkspace / transferWorkspaceOwnership).

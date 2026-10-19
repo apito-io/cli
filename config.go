@@ -14,10 +14,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AccountConfig represents configuration for a single account
+// AccountConfig is one named Apito server. The access token is not written to
+// config.yml; it lives in the credential store and is hydrated into AccessToken.
 type AccountConfig struct {
-	ServerURL    string `yaml:"server_url"`     // Apito server URL for plugin management
-	CloudSyncKey string `yaml:"cloud_sync_key"` // Apito access token (apt_...) for authentication
+	ServerURL    string          `yaml:"server_url"`
+	AccessToken  string          `yaml:"-"`
+	TokenRef     string          `yaml:"token_ref,omitempty"`
+	Kind         string          `yaml:"kind,omitempty"` // local, cloud, or unknown. A hint, not authority.
+	ConsoleURL   string          `yaml:"console_url,omitempty"`
+	ProjectID    string          `yaml:"project_id,omitempty"`
+	TenantID     string          `yaml:"tenant_id,omitempty"`
+	Capabilities map[string]bool `yaml:"capabilities,omitempty"`
+	// MCP credentials stay separate from the CLI apt_ token. The secret is not written to config.yml.
+	MCPAccessToken      string              `yaml:"-"`
+	MCPTokenRef         string              `yaml:"mcp_token_ref,omitempty"`
+	MCPProjectGrantMode string              `yaml:"mcp_project_grant_mode,omitempty"`
+	MCPProjectIDs       []string            `yaml:"mcp_project_ids,omitempty"`
+	MCPTenantGrantMode  string              `yaml:"mcp_tenant_grant_mode,omitempty"`
+	MCPTenantIDs        map[string][]string `yaml:"mcp_tenant_ids,omitempty"`
+	MCPProjectID        string              `yaml:"mcp_project_id,omitempty"`
+	MCPTenantID         string              `yaml:"mcp_tenant_id,omitempty"`
+	// CloudSyncKey is accepted from older config files and migrated on load.
+	CloudSyncKey string `yaml:"cloud_sync_key,omitempty"`
 }
 
 type CLIConfig struct {
@@ -40,7 +58,7 @@ func configFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(homeDir, ".apito"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(homeDir, ".apito"), 0o700); err != nil {
 		return "", err
 	}
 	return filepath.Join(homeDir, ".apito", "config.yml"), nil
@@ -79,7 +97,6 @@ func loadCLIConfig() (*CLIConfig, error) {
 	// Migration: Convert legacy flat config to account-based
 	if cfg.ServerURL != "" || cfg.CloudSyncKey != "" {
 		if len(cfg.Accounts) == 0 {
-			// Create default account from legacy config
 			cfg.Accounts["default"] = AccountConfig{
 				ServerURL:    cfg.ServerURL,
 				CloudSyncKey: cfg.CloudSyncKey,
@@ -87,15 +104,49 @@ func loadCLIConfig() (*CLIConfig, error) {
 			if cfg.DefaultAccount == "" {
 				cfg.DefaultAccount = "default"
 			}
-			// Clear legacy fields
 			cfg.ServerURL = ""
 			cfg.CloudSyncKey = ""
-			// Save migrated config
-			_ = saveCLIConfig(cfg)
 		}
+	}
+	if err := hydrateAccountTokens(cfg); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
+}
+
+func hydrateAccountTokens(cfg *CLIConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	dirty := false
+	for name, acc := range cfg.Accounts {
+		if strings.TrimSpace(acc.CloudSyncKey) != "" {
+			if strings.TrimSpace(acc.AccessToken) == "" {
+				acc.AccessToken = strings.TrimSpace(acc.CloudSyncKey)
+			}
+			dirty = true
+		}
+		if strings.TrimSpace(acc.AccessToken) == "" && acc.TokenRef != "" {
+			tok, err := getAccountToken(name)
+			if err != nil {
+				return err
+			}
+			acc.AccessToken = tok
+		}
+		if strings.TrimSpace(acc.MCPAccessToken) == "" && acc.MCPTokenRef != "" {
+			tok, err := getMCPAccountToken(name)
+			if err != nil {
+				return err
+			}
+			acc.MCPAccessToken = tok
+		}
+		cfg.Accounts[name] = acc
+	}
+	if dirty {
+		return saveCLIConfig(cfg)
+	}
+	return nil
 }
 
 // ensureCLIConfig recreates ~/.apito/config.yml and ~/.apito/bin/.env when either
@@ -147,11 +198,54 @@ func saveCLIConfig(cfg *CLIConfig) error {
 	if err != nil {
 		return err
 	}
+	type remembered struct {
+		name  string
+		token string
+		mcp   string
+	}
+	var keep []remembered
+	if cfg != nil {
+		for name, acc := range cfg.Accounts {
+			item := remembered{name: name, token: acc.Token(), mcp: strings.TrimSpace(acc.MCPAccessToken)}
+			if item.token != "" {
+				if err := putAccountToken(name, item.token); err != nil {
+					return err
+				}
+				acc.SetToken(item.token)
+				acc.TokenRef = credentialStoreKind()
+			}
+			if item.mcp != "" {
+				if err := putMCPAccountToken(name, item.mcp); err != nil {
+					return err
+				}
+				acc.MCPTokenRef = credentialStoreKind()
+			}
+			acc.CloudSyncKey = ""
+			acc.AccessToken = ""
+			acc.MCPAccessToken = ""
+			cfg.Accounts[name] = acc
+			if item.token != "" || item.mcp != "" {
+				keep = append(keep, item)
+			}
+		}
+	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	for _, item := range keep {
+		acc := cfg.Accounts[item.name]
+		if item.token != "" {
+			acc.AccessToken = item.token
+		}
+		acc.MCPAccessToken = item.mcp
+		acc.CloudSyncKey = ""
+		cfg.Accounts[item.name] = acc
+	}
+	return nil
 }
 
 // determineRunMode loads mode from config. If empty, prompt the user to
@@ -306,7 +400,7 @@ var accountCmd = &cobra.Command{
 var accountCreateCmd = &cobra.Command{
 	Use:   "create <account-name>",
 	Short: "Create a new account",
-	Long:  `Create a new account with server URL and sync key`,
+	Long:  `Compatibility alias for a custom account. Prefer apito login.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		createAccount(args[0])
@@ -333,10 +427,11 @@ var accountSelectCmd = &cobra.Command{
 }
 
 var accountDeleteCmd = &cobra.Command{
-	Use:   "delete <account-name>",
-	Short: "Delete an account",
-	Long:  `Delete an account configuration`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "delete <account-name>",
+	Aliases: []string{"remove"},
+	Short:   "Delete an account",
+	Long:    `Delete an account configuration. apito account remove is the same command.`,
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		deleteAccount(args[0])
 	},
@@ -429,7 +524,7 @@ func setConfigValue(key, value string) {
 		}
 		// Set for default account
 		if account, exists := cfg.Accounts[cfg.DefaultAccount]; exists {
-			account.CloudSyncKey = value
+			account.SetToken(value)
 			cfg.Accounts[cfg.DefaultAccount] = account
 		}
 
@@ -494,11 +589,11 @@ func getConfigValue(key string) {
 
 	case "cloud_sync_key", "sync_key", "key":
 		// Show default account's sync key
-		if cfg.DefaultAccount != "" && cfg.Accounts[cfg.DefaultAccount].CloudSyncKey != "" {
-			print_status(fmt.Sprintf("cloud_sync_key: %s (from account '%s')",
-				maskSensitiveValue(key, cfg.Accounts[cfg.DefaultAccount].CloudSyncKey), cfg.DefaultAccount))
+		if cfg.DefaultAccount != "" && cfg.Accounts[cfg.DefaultAccount].Token() != "" {
+			print_status(fmt.Sprintf("access_token: %s (from account '%s')",
+				maskSensitiveValue(key, cfg.Accounts[cfg.DefaultAccount].Token()), cfg.DefaultAccount))
 		} else {
-			print_status("cloud_sync_key: (not set)")
+			print_status("access_token: (not set)")
 		}
 
 	case "timeout":
@@ -537,7 +632,7 @@ func getConfigValue(key string) {
 				}
 				print_status(fmt.Sprintf("Account '%s'%s:", name, defaultMarker))
 				print_status(fmt.Sprintf("  URL: %s", getValueOrNotSet(account.ServerURL, "")))
-				print_status(fmt.Sprintf("  Key: %s", maskSensitiveValue("key", account.CloudSyncKey)))
+				print_status(fmt.Sprintf("  Key: %s", maskSensitiveValue("key", account.Token())))
 			}
 		}
 
@@ -578,14 +673,14 @@ func showAllConfig() {
 			}
 			print_status(fmt.Sprintf("  %s%s", name, defaultMarker))
 			print_status(fmt.Sprintf("    URL: %s", getValueOrNotSet(account.ServerURL, "")))
-			print_status(fmt.Sprintf("    Key: %s", maskSensitiveValue("key", account.CloudSyncKey)))
+			print_status(fmt.Sprintf("    Key: %s", maskSensitiveValue("key", account.Token())))
 		}
 	}
 
 	// Check if plugin configuration is complete
 	hasValidAccount := false
 	for _, account := range cfg.Accounts {
-		if account.ServerURL != "" && account.CloudSyncKey != "" {
+		if account.ServerURL != "" && account.Token() != "" {
 			hasValidAccount = true
 			break
 		}
@@ -697,10 +792,9 @@ func initializePluginConfig() {
 	}
 
 	// Create account
-	cfg.Accounts[accountName] = AccountConfig{
-		ServerURL:    strings.TrimSuffix(serverURL, "/"),
-		CloudSyncKey: cloudSyncKey,
-	}
+	created := AccountConfig{ServerURL: strings.TrimSuffix(serverURL, "/")}
+	created.SetToken(cloudSyncKey)
+	cfg.Accounts[accountName] = created
 
 	// Set as default if it's the first account
 	if len(cfg.Accounts) == 1 {
@@ -840,7 +934,7 @@ func setAccountConfigValue(accountName, key, value string) {
 		if len(value) < 10 {
 			print_warning("Access token seems short, make sure it's correct")
 		}
-		account.CloudSyncKey = value
+		account.SetToken(value)
 
 	default:
 		print_error("Unknown account configuration key: " + key)
@@ -905,10 +999,9 @@ func createAccount(accountName string) {
 	}
 
 	// Create account
-	cfg.Accounts[accountName] = AccountConfig{
-		ServerURL:    strings.TrimSuffix(serverURL, "/"),
-		CloudSyncKey: cloudSyncKey,
-	}
+	created := AccountConfig{ServerURL: strings.TrimSuffix(serverURL, "/")}
+	created.SetToken(cloudSyncKey)
+	cfg.Accounts[accountName] = created
 
 	// Set as default if it's the first account
 	if len(cfg.Accounts) == 1 {
@@ -954,7 +1047,7 @@ func listAccounts() {
 
 		print_status(fmt.Sprintf("🔑 %s%s", name, defaultMarker))
 		print_status(fmt.Sprintf("   URL: %s", getValueOrNotSet(account.ServerURL, "")))
-		print_status(fmt.Sprintf("   Key: %s", maskSensitiveValue("key", account.CloudSyncKey)))
+		print_status(fmt.Sprintf("   Key: %s", maskSensitiveValue("key", account.Token())))
 		print_status("")
 	}
 }
@@ -1008,7 +1101,10 @@ func deleteAccount(accountName string) {
 		return
 	}
 
-	// Delete account
+	if err := deleteAccountToken(accountName); err != nil {
+		print_error("Failed to delete stored credentials: " + err.Error())
+		return
+	}
 	delete(cfg.Accounts, accountName)
 
 	// Update default account if it was deleted
@@ -1052,7 +1148,7 @@ func selectAccountInteractively() string {
 	}
 
 	if len(cfg.Accounts) == 0 {
-		print_error("No accounts configured. Create one with: apito account create <name>")
+		print_error("No accounts configured. Run apito login")
 		return ""
 	}
 
@@ -1107,7 +1203,7 @@ func getAccountConfig(accountName string) (AccountConfig, error) {
 	// If still no account, try to select one interactively
 	if accountName == "" {
 		if len(cfg.Accounts) == 0 {
-			return AccountConfig{}, fmt.Errorf("no accounts configured. Create one with: apito account create <name>")
+			return AccountConfig{}, fmt.Errorf("no accounts configured. Run apito login")
 		}
 
 		// Interactive account selection
@@ -1132,11 +1228,11 @@ func getAccountConfig(accountName string) (AccountConfig, error) {
 		return AccountConfig{}, fmt.Errorf("account '%s' has no server URL configured", accountName)
 	}
 
-	if account.CloudSyncKey == "" {
-		return AccountConfig{}, fmt.Errorf("account '%s' has no access token configured", accountName)
+	if account.Token() == "" {
+		return AccountConfig{}, fmt.Errorf("account '%s' has no access token configured. Run apito login", accountName)
 	}
 
-	if IsRetiredTokenPrefix(account.CloudSyncKey) {
+	if IsRetiredTokenPrefix(account.Token()) {
 		return AccountConfig{}, fmt.Errorf("account '%s': %s", accountName, TokenFormatRetiredMessage)
 	}
 
@@ -1167,19 +1263,19 @@ func testAccountConnection(accountName string) {
 		return
 	}
 
-	if account.CloudSyncKey == "" {
+	if account.Token() == "" {
 		print_error("Account has no access token configured")
-		print_status("Set access token with: apito config set account " + accountName + " key <apt_...>")
+		print_status("Run apito login")
 		return
 	}
 
-	if IsRetiredTokenPrefix(account.CloudSyncKey) {
+	if IsRetiredTokenPrefix(account.Token()) {
 		print_error(TokenFormatRetiredMessage)
 		return
 	}
 
 	print_status(fmt.Sprintf("Server URL: %s", account.ServerURL))
-	print_status(fmt.Sprintf("Access Token: %s", maskSensitiveValue("key", account.CloudSyncKey)))
+	print_status(fmt.Sprintf("Access Token: %s", maskSensitiveValue("key", account.Token())))
 	print_status("Testing connection...")
 
 	// Test connection
@@ -1194,7 +1290,7 @@ func testAccountConnection(accountName string) {
 		return
 	}
 
-	req.Header.Set("Authorization", "Bearer "+account.CloudSyncKey)
+	req.Header.Set("Authorization", "Bearer "+account.Token())
 	req.Header.Set("X-Use-Cookies", "false")
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1213,6 +1309,17 @@ func testAccountConnection(accountName string) {
 	if resp.StatusCode == 200 {
 		print_success("✅ Connection test successful")
 		print_status("Server is reachable and the access token is valid")
+		sys := newSystemClient(account.ServerURL, account.Token(), cfg.Timeout)
+		if caps, err := sys.probeCapabilities(); err == nil {
+			account.Capabilities = caps.Flags
+			if caps.ConsoleURL != "" {
+				account.ConsoleURL = caps.ConsoleURL
+			}
+			cfg.Accounts[accountName] = account
+			if err := saveCLIConfig(cfg); err != nil {
+				print_warning("Could not cache capabilities: " + err.Error())
+			}
+		}
 	} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		body, _ := io.ReadAll(resp.Body)
 		if strings.Contains(string(body), "TOKEN_FORMAT_RETIRED") {

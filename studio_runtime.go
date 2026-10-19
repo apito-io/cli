@@ -10,10 +10,10 @@ import (
 )
 
 const studioContainerName = "apito-studio"
-const studioPublishPort = "5055"
+const studioPublishPort = "4055"
 
 // studioEnginePort is the port inside the container. The public engine refuses 5050.
-const studioEnginePort = "5051"
+const studioEnginePort = "5055"
 
 func startStudioContainer() error {
 	if err := ensureCLIConfig(); err != nil {
@@ -40,6 +40,7 @@ func startStudioContainer() error {
 		"run", "-d",
 		"--name", studioContainerName,
 		"-p", studioPublishPort + ":" + studioPublishPort,
+		"-p", studioEnginePort + ":" + studioEnginePort,
 	}
 	mounts, err := studioVolumeArgs()
 	if err != nil {

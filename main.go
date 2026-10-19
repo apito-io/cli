@@ -13,7 +13,7 @@ var version = "dev"
 var rootCmd = &cobra.Command{
 	Use:   "apito",
 	Short: "Apito CLI",
-	Long:  `Apito CLI to manage projects, functions, and more.`,
+	Long:  `Apito CLI for local engines and Apito Cloud. One binary. Cloud-only commands stay visible and fail closed until the account has the capability.`,
 }
 
 func main() {
@@ -21,8 +21,10 @@ func main() {
 	rootCmd.Version = version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
-	var project string
-	rootCmd.PersistentFlags().StringVar(&project, "project", "", "ver")
+	rootCmd.PersistentFlags().StringVar(&flagAccount, "account", "", "Named account from apito login")
+	rootCmd.PersistentFlags().StringVar(&flagProject, "project", "", "Project id")
+	rootCmd.PersistentFlags().StringVar(&flagTenant, "tenant", "", "Tenant id")
+	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "Print machine-readable JSON")
 
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(updateCmd)
@@ -31,9 +33,8 @@ func main() {
 	rootCmd.AddCommand(restartCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(logsCmd)
-	rootCmd.AddCommand(pluginCmd) // Add plugin management commands
+	rootCmd.AddCommand(pluginCmd)
 	rootCmd.AddCommand(adminCmd)
-	// pruned commands: list, login, change-pass
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

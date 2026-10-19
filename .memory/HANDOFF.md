@@ -1,5 +1,18 @@
 # CLI — Handoff
 
+## Release v0.5.0 (2026-10-19)
+
+- **Done:** Unified CLI committed and tagged **v0.5.0**. `apito login` stores the low-harm login token. `apito types` generates from the published schema.
+- **Needs:** An engine that mints `cli_login` and serves introspection with `schema.read`. `apito sync` still needs a separate `cli_sync` token.
+- **Do not:** Put tokens in generated files or MCP config.
+
+## Low-harm login (2026-10-19)
+
+- **Done:** Contract records `cli_login`, the introspection rule, and the stolen-token boundary.
+- **Verified:** Rebuilt `./cli` logged in `udb-local` against `http://localhost:4000` and generated Suchok types.
+- **Not done:** No CLI release. `apito sync` needs a separate `cli_sync` token.
+- **Do not:** Put `apt_` into generated files. Ask before `./command.sh save`.
+
 ## Cloud HTTP MCP URL (2026-10-18)
 
 - **Done:** `resolveMCPHTTPTarget` and the no-account HTTP fallback use `https://api.apito.io/mcp`. Tests passed.

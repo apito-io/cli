@@ -76,7 +76,7 @@ func runDumpCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	fromBase := newSyncGraphQLClient(fromCfg.ServerURL, fromCfg.CloudSyncKey, timeoutSec)
+	fromBase := newSyncGraphQLClient(fromCfg.ServerURL, fromCfg.Token(), timeoutSec)
 	fromProject, err := selectSyncProject(fromBase, "FROM")
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func runDumpCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.CloudSyncKey, timeoutSec)
+	toBase := newSyncGraphQLClient(toCfg.ServerURL, toCfg.Token(), timeoutSec)
 	toProject, err := selectSyncProject(toBase, "TO")
 	if err != nil {
 		return err
