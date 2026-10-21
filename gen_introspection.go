@@ -11,7 +11,7 @@ import (
 
 const publishedIntrospectionQuery = `query IntrospectionQuery {
   __schema {
-    queryType { name }
+    queryType { name fields { name } }
     mutationType { name }
     subscriptionType { name }
     types { ...FullType }
@@ -85,6 +85,9 @@ func fetchIntrospection(ctx commandContext) ([]byte, error) {
 	if strings.TrimSpace(ctx.ProjectID) == "" || ctx.Client == nil || strings.TrimSpace(ctx.Client.projectID) == "" {
 		return nil, fmt.Errorf("project id is required to read the published schema. Pass --project or set it on the account")
 	}
+	if _, err := projectOnAccount(ctx); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(graphqlRequest{Query: publishedIntrospectionQuery})
 	if err != nil {
 		return nil, err
@@ -119,6 +122,28 @@ func fetchIntrospection(ctx commandContext) ([]byte, error) {
 		return nil, fmt.Errorf("published schema introspection returned no schema")
 	}
 	return raw, nil
+}
+
+// projectOnAccount returns the requested project only when ListProjects — the
+// same query apito sync and apito project list use — includes its id.
+// The list is read with no project or tenant header. Pinning X-Apito-Project-Id
+// to an id this account does not have makes the engine reject the call before
+// it can say the project is missing.
+func projectOnAccount(ctx commandContext) (SyncProject, error) {
+	wanted := strings.TrimSpace(ctx.ProjectID)
+	if wanted == "" {
+		return SyncProject{}, fmt.Errorf("project id is required to read the published schema. Pass --project or set it on the account")
+	}
+	projects, err := ctx.syncClient().WithProject("").WithTenant("").ListProjects()
+	if err != nil {
+		return SyncProject{}, fmt.Errorf("cannot list projects on account %s: %w", ctx.Name, err)
+	}
+	for _, project := range projects {
+		if strings.TrimSpace(project.ID) == wanted {
+			return project, nil
+		}
+	}
+	return SyncProject{}, fmt.Errorf("account %s does not include project %s", ctx.Name, wanted)
 }
 
 func schemaSnapshotDest(out string) string {

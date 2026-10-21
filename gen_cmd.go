@@ -85,11 +85,25 @@ func runGen(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	language, detectedFramework, err := detectLanguage(dir, genLanguage)
+	typeYAML, _, err := loadApitoTypeYAML(dir)
+	if err != nil {
+		return err
+	}
+	if typeYAML != nil && strings.TrimSpace(flagProject) == "" && strings.TrimSpace(typeYAML.Project) != "" {
+		flagProject = strings.TrimSpace(typeYAML.Project)
+	}
+	langHint := genLanguage
+	if strings.TrimSpace(langHint) == "" && typeYAML != nil && strings.TrimSpace(typeYAML.Language) != "" {
+		langHint = strings.TrimSpace(typeYAML.Language)
+	}
+	language, detectedFramework, err := detectLanguage(dir, langHint)
 	if err != nil {
 		return err
 	}
 	framework := strings.ToLower(strings.TrimSpace(genFramework))
+	if framework == "" && typeYAML != nil && strings.TrimSpace(typeYAML.Framework) != "" {
+		framework = strings.ToLower(strings.TrimSpace(typeYAML.Framework))
+	}
 	if framework == "" {
 		framework = detectedFramework
 	}
@@ -111,6 +125,9 @@ func runGen(cmd *cobra.Command, args []string) error {
 		}
 	}
 	out := genOut
+	if out == "" && typeYAML != nil && strings.TrimSpace(typeYAML.Out) != "" {
+		out = strings.TrimSpace(typeYAML.Out)
+	}
 	if out == "" {
 		switch language {
 		case "go":
@@ -127,9 +144,11 @@ func runGen(cmd *cobra.Command, args []string) error {
 	profile := "unselected"
 	if strings.TrimSpace(flagAccount) != "" || strings.TrimSpace(flagProject) != "" {
 		if ctx, err := resolveCommandContext(); err == nil && ctx.ProjectID != "" {
-			if project, err := ctx.syncClient().CurrentProject(); err == nil && project != nil {
-				profile = backendProfile(*project)
+			project, err := projectOnAccount(ctx)
+			if err != nil {
+				return err
 			}
+			profile = backendProfile(project)
 		}
 	}
 	plan := map[string]interface{}{
@@ -316,7 +335,6 @@ func tsCodegenArgs(schemaPath, out, models, artifacts string) []string {
 }
 
 func defaultTSCodegen(schemaPath, out, models, artifacts string) error {
-	args := tsCodegenArgs(schemaPath, out, models, artifacts)
 	work := genDir
 	if strings.TrimSpace(work) == "" {
 		cwd, err := os.Getwd()
@@ -325,25 +343,18 @@ func defaultTSCodegen(schemaPath, out, models, artifacts string) error {
 		}
 		work = cwd
 	}
-	var cmd *exec.Cmd
 	if codegen := os.Getenv("APITO_CODEGEN_BIN"); codegen != "" {
-		cmd = exec.Command(codegen, args...)
-	} else if detectPackageManager(work) == "pnpm" {
-		cmd = exec.Command("pnpm", append([]string{"exec", "apito-codegen"}, args...)...)
-	} else {
-		bin, err := exec.LookPath("npx")
-		if err != nil {
-			return fmt.Errorf("npx is required to run apito-codegen. Install Node.js and @apito-io/js-admin-sdk")
+		args := tsCodegenArgs(schemaPath, out, models, artifacts)
+		cmd := exec.Command(codegen, args...)
+		cmd.Dir = work
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("apito-codegen failed: %w", err)
 		}
-		cmd = exec.Command(bin, append([]string{"--yes", "apito-codegen"}, args...)...)
+		return nil
 	}
-	cmd.Dir = work
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("apito-codegen failed: %w", err)
-	}
-	return nil
+	return runNativeTSCodegen(work, schemaPath, out, models, artifacts, genRelations, strings.TrimSpace(genUIPackage))
 }
 
 func defaultGoCodegen(schemaPath, out, models, modulePath string, prune bool) error {

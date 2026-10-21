@@ -15,11 +15,18 @@ func TestFetchIntrospectionUsesAccountOnSecuredGraphQL(t *testing.T) {
 	var sawPath, sawAuth, sawProject, sawTenant string
 	var sawBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Contains(body, []byte("listProjects")) {
+			if r.Header.Get("X-Apito-Project-Id") != "" || r.Header.Get("X-Apito-Tenant-ID") != "" {
+				t.Errorf("project list pinned project=%q tenant=%q", r.Header.Get("X-Apito-Project-Id"), r.Header.Get("X-Apito-Tenant-ID"))
+			}
+			_, _ = w.Write([]byte(`{"data":{"listProjects":[{"id":"suchok_wb8ed","name":"Suchok"}]}}`))
+			return
+		}
 		sawPath = r.URL.Path
 		sawAuth = r.Header.Get("Authorization")
 		sawProject = r.Header.Get("X-Apito-Project-Id")
 		sawTenant = r.Header.Get("X-Apito-Tenant-ID")
-		body, _ := io.ReadAll(r.Body)
 		sawBody = body
 		_, _ = w.Write([]byte(`{"data":{"__schema":{"queryType":{"name":"Query"},"types":[]}}}`))
 	}))
@@ -61,6 +68,11 @@ func TestFetchIntrospectionRequiresProjectAndDropsSecrets(t *testing.T) {
 	}
 
 	secretSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Contains(body, []byte("listProjects")) {
+			_, _ = w.Write([]byte(`{"data":{"listProjects":[{"id":"project_1","name":"Project"}]}}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"data":{"__schema":{"description":"apt_secret"}}}`))
 	}))
 	defer secretSrv.Close()
@@ -70,6 +82,39 @@ func TestFetchIntrospectionRequiresProjectAndDropsSecrets(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "credential") || strings.Contains(err.Error(), "apt_secret") {
 		t.Fatalf("secret response: %v", err)
+	}
+}
+
+func TestFetchIntrospectionRejectsAProjectTheAccountCannotOpen(t *testing.T) {
+	secured := false
+	listed := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Contains(body, []byte("listProjects")) {
+			listed = true
+			if r.Header.Get("X-Apito-Project-Id") != "" {
+				t.Errorf("project list pinned %s", r.Header.Get("X-Apito-Project-Id"))
+			}
+			_, _ = w.Write([]byte(`{"data":{"listProjects":[{"id":"other_project","name":"Other"}]}}`))
+			return
+		}
+		secured = true
+		_, _ = w.Write([]byte(`{"data":{"__schema":{"types":[]}}}`))
+	}))
+	defer srv.Close()
+	_, err := fetchIntrospection(commandContext{
+		Name:      "local",
+		ProjectID: "rosna_v2_jpn6o",
+		Client:    newSystemClient(srv.URL, "apt_testtoken", 5).WithProject("rosna_v2_jpn6o"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "account local does not include project rosna_v2_jpn6o") {
+		t.Fatalf("mismatch: %v", err)
+	}
+	if !listed {
+		t.Fatal("did not ask for the account project list")
+	}
+	if secured {
+		t.Fatal("introspection ran for a project missing from the account list")
 	}
 }
 
