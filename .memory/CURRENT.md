@@ -1,5 +1,17 @@
 # CLI — Current
 
+## Now (2026-10-25) — Studio nginx no longer takes the engine port
+
+`apito start` mounts `studio.nginx.conf` over the image nginx config. Nginx listens on 4055 and proxies to the engine on 5055. A rebuilt `./cli start` against `ghcr.io/apito-io/studio:v0.1.8` answered console 200, `/admin` 404 from the engine, and engine 200. Container listeners were nginx `0.0.0.0:4055` and the engine `:::5055`. No `address already in use`. The published image itself still has nginx on 5055; the mount covers that. Uncommitted. Ask before `./command.sh save`.
+
+## Now (2026-10-25) — Studio start checks ports, then pings
+
+`apito start` checks host ports 4055 and 5055 before it replaces the container. A busy port names the container or process and asks to stop it, kill it, or skip. Skip does not start Studio. After the container starts, it pings `http://localhost:4055`, `http://localhost:4055/admin`, and `http://localhost:5055`, and prints those URLs only when they answer. Focused port tests passed. The published `ghcr.io/apito-io/studio:v0.1.8` image still has nginx on 5055 proxying to 5051, so a fresh container fails the ping: the engine also binds 5055 and exits with `address already in use`. The local `studio-oss` nginx and Dockerfile already move nginx to 4055 and the engine to 5055, but that change is uncommitted and is not in the published image. Uncommitted. Ask before `./command.sh save`.
+
+## Now (2026-10-24) — Studio image upgrade check
+
+`apito start` now checks public GHCR Studio tags on every run. Empty/`latest` config continues tracking `latest`; pinned tags such as `local` prompt before upgrading to the newest semver tag. The prompt shows the current image version: a release tag as-is, or the pin plus its build date when the pin is not a release. Confirmed upgrades pull first, persist `studio_version`, and start the new image. Declining, registry errors, and failed upgrade pulls keep the current cached image when available. A rebuilt `./cli start` offered `local → v0.1.7` on the binary from before that current-version line and was not answered. `~/.apito/config.yml` still has `studio_version: local`. The local image was built 2026-10-12 and has no release label. `go test ./...` passed. `go vet ./...` still reports pre-existing unreachable code in `stop.go`. Uncommitted. Ask before `./command.sh save`.
+
 ## Now (2026-10-19) — CLI v0.5.0
 
 Tagged **v0.5.0**. `apito login` stores a `cli_login` token that reads the project list and published schema. `apito types` generates from that schema. `cli_sync` remains the explicit sync preset. Needs an engine that mints `cli_login` and allows pure introspection with `schema.read`.

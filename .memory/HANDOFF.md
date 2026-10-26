@@ -1,5 +1,13 @@
 # CLI — Handoff
 
+## Studio image upgrade check (2026-10-25)
+
+- **Done:** `apito start` discovers the newest semver Studio tag from public GHCR, prompts before replacing a pinned `studio_version` (including `local`), shows the current image version, persists only after the pull succeeds, and falls back to the cached image on a declined or failed refresh. Docs and unit tests updated.
+- **Seen:** Rebuilt `./cli start` offered `local → v0.1.7`. That prompt was the binary from before the current-version line and was not answered. Local image `ghcr.io/apito-io/studio:local` was built 2026-10-12 and has no release label. `~/.apito/config.yml` still says `studio_version: local`.
+- **Verified:** `go test ./...` passed. `go vet ./...` still reports existing unreachable code in `stop.go` lines 41 and 141.
+- **Not done:** No upgrade, commit, push, or `./command.sh save`.
+- **Do not:** Answer the upgrade prompt. Change `studio_version` or pull `v0.1.7` until asked.
+
 ## Release v0.5.0 (2026-10-19)
 
 - **Done:** Unified CLI committed and tagged **v0.5.0**. `apito login` stores the low-harm login token. `apito types` generates from the published schema.

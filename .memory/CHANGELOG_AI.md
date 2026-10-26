@@ -1,5 +1,29 @@
 # cli — AI Changelog
 
+## 2026-10-25 — Studio nginx leaves 5055 for the engine
+
+- **Changed:** `apito start` writes and mounts `studio.nginx.conf` so nginx listens on 4055 and proxies API paths, including `/admin`, to the engine on 5055.
+- **Why:** Image `v0.1.8` ran nginx on 5055 and proxied to 5051. The engine then failed with `listen tcp :5055: bind: address already in use`, and `http://localhost:4055` never answered.
+- **Affected:** `studio.nginx.conf`, `studio_nginx.go`, `studio_runtime.go`. Restarted Studio and confirmed console 200, `/admin` reached the engine, and the engine stayed bound to 5055. Uncommitted. Ask before `./command.sh save`.
+
+## 2026-10-25 — Studio start checks ports and pings before URLs
+
+- **Changed:** `apito start` checks host ports 4055 and 5055, asks to stop, kill, or skip when one is busy, then pings the console, `/admin`, and the engine before printing URLs.
+- **Why:** Start printed the console URL while an old container still held the ports, and it did not notice when the new container's engine failed to bind.
+- **Affected:** `studio_ports.go`, `studio_runtime.go`, `studio_ports_test.go`, local orchestration feature doc. Focused tests passed. Uncommitted. Ask before `./command.sh save`.
+
+## 2026-10-25 — Studio upgrade prompt shows current image
+
+- **Changed:** The upgrade prompt prints the current Studio image version beside the latest tag. A release pin stays as that tag. A non-release pin such as `local` includes the image build date, and a matching local release tag when one exists.
+- **Why:** `local` is a pin, not a version, so the first prompt did not say what image was already on the machine.
+- **Affected:** `studio_runtime.go`, `version_manager.go`, `version_manager_test.go`, local orchestration feature doc. Focused tests passed. Uncommitted. Ask before `./command.sh save`.
+
+## 2026-10-24 — Studio image upgrade check
+
+- **Changed:** `apito start` queries public GHCR tags, prompts before upgrading pinned Studio images, persists a confirmed tag only after pulling it, and keeps a cached current image when refresh fails. Added unit tests and updated CLI/local orchestration docs.
+- **Why:** `studio_version: local` previously attempted only the nonexistent remote `:local` tag, then silently started the old cached image without checking for a newer published Studio image.
+- **Affected:** `studio_runtime.go`, `version_manager.go`, `config.go`, `version_manager_test.go`, CLI README, local orchestration feature doc. `go test ./...` passed; `go vet ./...` still reports existing unreachable code in `stop.go`. Uncommitted. Ask before `./command.sh save`.
+
 ## 2026-10-19 — CLI v0.5.0
 
 - **Changed:** Release the unified CLI: browser login, `apito types` / `apito gen`, MCP connect, and capability-gated project, key, tenant, backup, and restore commands. Login stores `cli_login` (`projects.read` and `schema.read`). Type generation reads published schema and refuses credential output.
