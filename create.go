@@ -24,25 +24,22 @@ picker as apito sync. When no account is connected, the command asks you to
 connect one and then creates the project through the system API.
 
 Plugin scaffolds stay on apito plugin create.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		createProject()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return createProject()
 	},
 }
 
-func createProject() {
+func createProject() error {
 	if err := ensureCLIConfig(); err != nil {
-		print_error(err.Error())
-		return
+		return err
 	}
 	accountName, err := resolveAccountForCreate()
 	if err != nil {
-		print_error(err.Error())
-		return
+		return err
 	}
 	account, err := getAccountConfig(accountName)
 	if err != nil {
-		print_error(err.Error())
-		return
+		return err
 	}
 
 	namePrompt := promptui.Prompt{Label: "Project name", Validate: func(s string) error {
@@ -53,16 +50,14 @@ func createProject() {
 	}}
 	name, err := namePrompt.Run()
 	if err != nil {
-		print_error("Project creation cancelled")
-		return
+		return fmt.Errorf("project creation cancelled")
 	}
 	name = strings.TrimSpace(name)
 
 	descPrompt := promptui.Prompt{Label: "Description (optional)"}
 	description, err := descPrompt.Run()
 	if err != nil {
-		print_error("Project creation cancelled")
-		return
+		return fmt.Errorf("project creation cancelled")
 	}
 
 	typeSelect := promptui.Select{
@@ -71,8 +66,7 @@ func createProject() {
 	}
 	_, projectType, err := typeSelect.Run()
 	if err != nil {
-		print_error("Project creation cancelled")
-		return
+		return fmt.Errorf("project creation cancelled")
 	}
 
 	projectID := slugProjectID(name)
@@ -88,31 +82,29 @@ func createProject() {
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		print_error(err.Error())
-		return
+		return err
 	}
 
 	endpoint := strings.TrimSuffix(account.ServerURL, "/") + "/system/project/create"
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		print_error(err.Error())
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+account.Token())
+	req.Header.Set("X-Use-Cookies", "false")
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		print_error("Create request failed: " + err.Error())
-		return
+		return fmt.Errorf("create request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		print_error(fmt.Sprintf("Create failed (%s): %s", resp.Status, strings.TrimSpace(string(respBody))))
-		return
+		return fmt.Errorf("create failed (%s): %s", resp.Status, strings.TrimSpace(string(respBody)))
 	}
 	print_success(fmt.Sprintf("Project %s created on account %s (%s)", projectID, accountName, account.ServerURL))
+	return nil
 }
 
 func resolveAccountForCreate() (string, error) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.3
+
+- `apito create` sends `X-Use-Cookies: false` and exits non-zero when the project is not created.
+- `apito sync` skips project fields this engine does not have, and the token hint appears only on 401 or 403. A missing account prints the login hint once.
+- `apito mcp` uses the active account, or the only account, instead of the name `default`.
+- `apito self-upgrade` writes the new binary beside the current one and renames it into place. `--yes` skips the prompt.
+- `apito status` fails when the console on port 4055 is not answering.
+- `apito start --db` accepts `--db-engine` and `--yes` without a terminal prompt.
+
 ## v0.5.2
 
 - `apito start` checks public GHCR Studio tags. A pinned tag shows the current image version and asks before upgrade. Declining keeps the current image. A failed refresh uses the cached image.

@@ -227,15 +227,30 @@ func (c *SyncGraphQLClient) listProjectsQuery(extended bool) ([]SyncProject, err
 }
 
 func (c *SyncGraphQLClient) CurrentProject() (*SyncProject, error) {
-	const query = `
-		query CurrentProject {
-			currentProject {
+	project, err := c.currentProjectQuery(true)
+	if err != nil {
+		if fallback, fbErr := c.currentProjectQuery(false); fbErr == nil {
+			return fallback, nil
+		}
+		return nil, err
+	}
+	return project, nil
+}
+
+func (c *SyncGraphQLClient) currentProjectQuery(extended bool) (*SyncProject, error) {
+	fields := `
 				id
 				name
 				description
-				project_type
+				project_type`
+	if extended {
+		fields += `
 				tenant_model_name
-				per_tenant_separate_database
+				per_tenant_separate_database`
+	}
+	query := `
+		query CurrentProject {
+			currentProject {` + fields + `
 			}
 		}
 	`

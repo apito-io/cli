@@ -110,7 +110,7 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(cfg.Accounts) == 0 {
-		return fmt.Errorf("no accounts configured — run: apito account create <name>")
+		return fmt.Errorf("no accounts configured — run: apito login")
 	}
 
 	timeoutSec := cfg.Timeout
@@ -366,10 +366,8 @@ func selectSyncTypeFilesystem() (string, error) {
 func validateSelectedProjectAccess(side string, selected SyncProject, current *SyncProject, currentErr error) (SyncProject, error) {
 	if currentErr != nil {
 		return SyncProject{}, fmt.Errorf(
-			"cannot load %s project %q (%s) with this access token: %w\n\n"+
-				"Regenerate the token in Console → Access Token, include this project in project_ids, "+
-				"update the account key (apito config set account <name> key <token>), and retry",
-			side, selected.Name, selected.ID, currentErr,
+			"cannot load %s project %q (%s) with this access token: %w%s",
+			side, selected.Name, selected.ID, currentErr, accessTokenRegenerateHint(currentErr),
 		)
 	}
 	if current == nil || strings.TrimSpace(current.ID) == "" {
@@ -394,6 +392,18 @@ func validateSelectedProjectAccess(side string, selected SyncProject, current *S
 		)
 	}
 	return *current, nil
+}
+
+func accessTokenRegenerateHint(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "http 401") || strings.Contains(msg, "http 403") || strings.Contains(msg, "unauthenticated") || strings.Contains(msg, "forbidden") {
+		return "\n\nRegenerate the token in Console → Access Token, include this project in project_ids, " +
+			"update the account key (apito config set account <name> key <token>), and retry"
+	}
+	return ""
 }
 
 func validateProjectProfiles(from, to SyncProject) error {

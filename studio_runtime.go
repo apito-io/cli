@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -180,11 +181,25 @@ func studioStatus() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		print_status("Studio container " + studioContainerName + " is not running")
-		return nil
+		return fmt.Errorf("studio is not running")
+	}
+	if !studioConsoleAlive() {
+		print_error("Console on port " + studioPublishPort + " is not answering")
+		return fmt.Errorf("console on port %s is not running", studioPublishPort)
 	}
 	print_status(studioContainerName + ": " + strings.TrimSpace(string(out)))
 	print_status("Console: http://localhost:" + studioPublishPort)
 	return nil
+}
+
+func studioConsoleAlive() bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + studioPublishPort + "/")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode < 500
 }
 
 func studioLogs(follow bool, tail int) error {

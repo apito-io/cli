@@ -134,10 +134,34 @@ func mcpRuntime() string {
 	return "node"
 }
 
-func buildMCPConfig(account, project string, includeRaw bool) ([]byte, error) {
-	if strings.TrimSpace(account) == "" {
-		account = "default"
+func resolveMCPConfigAccount(account string) (string, error) {
+	account = strings.TrimSpace(account)
+	if account != "" {
+		return account, nil
 	}
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return "", err
+	}
+	if name := strings.TrimSpace(cfg.DefaultAccount); name != "" {
+		if _, ok := cfg.Accounts[name]; ok {
+			return name, nil
+		}
+	}
+	if len(cfg.Accounts) == 1 {
+		for only := range cfg.Accounts {
+			return only, nil
+		}
+	}
+	return "", fmt.Errorf("no account connected. Run apito login")
+}
+
+func buildMCPConfig(account, project string, includeRaw bool) ([]byte, error) {
+	resolved, err := resolveMCPConfigAccount(account)
+	if err != nil {
+		return nil, err
+	}
+	account = resolved
 	var loaded AccountConfig
 	var hasAccount bool
 	if strings.TrimSpace(project) == "" || includeRaw {

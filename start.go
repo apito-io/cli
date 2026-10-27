@@ -20,6 +20,8 @@ import (
 )
 
 var startWithDB bool
+var startDBEngine string
+var startDBYes bool
 
 var startCmd = &cobra.Command{
 	Use:   "start [--db system|project]",
@@ -32,7 +34,7 @@ var startCmd = &cobra.Command{
 				print_error("Invalid database type. Use 'system' or 'project'")
 				return
 			}
-			startDatabaseInteractive(dbType)
+			startDatabaseInteractive(dbType, startDBEngine, startDBYes)
 			return
 		}
 		if err := startStudioContainer(); err != nil {
@@ -46,6 +48,8 @@ var startCmd = &cobra.Command{
 
 func init() {
 	startCmd.Flags().String("db", "", "Start a database via Docker before services (system|project)")
+	startCmd.Flags().StringVar(&startDBEngine, "db-engine", "", "Database engine for --db (postgres, mysql, mariadb, sqlserver, mongodb)")
+	startCmd.Flags().BoolVar(&startDBYes, "yes", false, "Use default database credentials without a prompt")
 }
 
 func startApito() {

@@ -11,9 +11,10 @@ var version = "dev"
 
 // Define rootCmd globally so other files can access it
 var rootCmd = &cobra.Command{
-	Use:   "apito",
-	Short: "Apito CLI",
-	Long:  `Apito CLI for local engines and Apito Cloud. One binary. Cloud-only commands stay visible and fail closed until the account has the capability.`,
+	Use:           "apito",
+	Short:         "Apito CLI",
+	Long:          `Apito CLI for local engines and Apito Cloud. One binary. Cloud-only commands stay visible and fail closed until the account has the capability.`,
+	SilenceErrors: true,
 }
 
 func main() {

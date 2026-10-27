@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var selfUpgradeYes bool
+
 var selfUpgradeCmd = &cobra.Command{
 	Use:   "self-upgrade",
 	Short: "Check for updates and upgrade the CLI",
@@ -28,6 +30,7 @@ var selfUpgradeCmd = &cobra.Command{
 }
 
 func init() {
+	selfUpgradeCmd.Flags().BoolVar(&selfUpgradeYes, "yes", false, "Upgrade without a prompt")
 	rootCmd.AddCommand(selfUpgradeCmd)
 }
 
@@ -106,6 +109,9 @@ func getLatestVersion(repo string) (string, error) {
 }
 
 func confirmUpgrade(message string) bool {
+	if selfUpgradeYes {
+		return true
+	}
 	prompt := promptui.Select{
 		Label: message,
 		Items: []string{"Yes", "No"},
@@ -229,11 +235,19 @@ func copyFile(src, dst string) error {
 func installBinary(srcPath, destPath, installDir string) error {
 	// Check if we can write to the install directory
 	if isWritable(installDir) {
-		// Direct copy
-		if err := copyFile(srcPath, destPath); err != nil {
+		staged := destPath + ".new"
+		if err := copyFile(srcPath, staged); err != nil {
 			return err
 		}
-		return os.Chmod(destPath, 0755)
+		if err := os.Chmod(staged, 0755); err != nil {
+			os.Remove(staged)
+			return err
+		}
+		if err := os.Rename(staged, destPath); err != nil {
+			os.Remove(staged)
+			return err
+		}
+		return nil
 	}
 
 	// Try with sudo

@@ -532,48 +532,68 @@ func showAllDatabaseConfigs() {
 	showProjectDatabaseConfig()
 }
 
+func normalizeDBEngine(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "postgres", "postgresql":
+		return "postgres"
+	case "mysql":
+		return "mysql"
+	case "mariadb":
+		return "mariadb"
+	case "sqlserver", "mssql":
+		return "sqlserver"
+	case "mongodb", "mongo":
+		return "mongodb"
+	default:
+		return ""
+	}
+}
+
 // startDatabaseInteractive prompts user to choose a database and starts it via Docker.
 // No-ops if Docker is not available or running.
-func startDatabaseInteractive(dbType string) {
+func startDatabaseInteractive(dbType, engineName string, assumeYes bool) {
 	if err := ensureDockerAndComposeAvailable(); err != nil {
 		print_status("Database helper is available in Docker mode only. " + err.Error())
 		return
 	}
 
 	print_status("Database setup for " + dbType + " database...")
-	prompt := promptui.Select{
-		Label: "Select a database to run (or Skip)",
-		Items: []string{"Postgres", "MySQL", "MariaDB", "SQLServer", "MongoDB", "Skip (I already have a database)"},
-	}
-	_, choice, err := prompt.Run()
-	if err != nil || choice == "Skip (I already have a database)" {
-		print_status("Skipping database setup")
-		return
-	}
-
-	var engine string
-	switch choice {
-	case "Postgres":
-		engine = "postgres"
-	case "MySQL":
-		engine = "mysql"
-	case "MariaDB":
-		engine = "mariadb"
-	case "SQLServer":
-		engine = "sqlserver"
-	case "MongoDB":
-		engine = "mongodb"
+	engine := normalizeDBEngine(engineName)
+	var config DatabaseConfig
+	var err error
+	if engine != "" || assumeYes {
+		if engine == "" {
+			engine = "postgres"
+		}
+		config = getDefaultConfig(engine)
+	} else {
+		prompt := promptui.Select{
+			Label: "Select a database to run (or Skip)",
+			Items: []string{"Postgres", "MySQL", "MariaDB", "SQLServer", "MongoDB", "Skip (I already have a database)"},
+		}
+		_, choice, promptErr := prompt.Run()
+		if promptErr != nil {
+			print_error("Pass --db-engine to start a database without a prompt")
+			return
+		}
+		if choice == "Skip (I already have a database)" {
+			print_status("Skipping database setup")
+			return
+		}
+		engine = normalizeDBEngine(choice)
+		if engine == "" {
+			print_error("Unsupported database selection")
+			return
+		}
+		config, err = promptForCredentials(engine)
+		if err != nil {
+			print_error("Failed to get database credentials: " + err.Error())
+			return
+		}
 	}
 
 	if engine == "" {
 		print_error("Unsupported database selection")
-		return
-	}
-
-	// Prompt for credentials
-	config, err := promptForCredentials(engine)
-	if err != nil {
-		print_error("Failed to get database credentials: " + err.Error())
 		return
 	}
 
