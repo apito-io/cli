@@ -36,8 +36,11 @@ var startCmd = &cobra.Command{
 			return
 		}
 		if err := startStudioContainer(); err != nil {
+			noteStartResult(err)
 			print_error(err.Error())
+			return
 		}
+		noteStartResult(nil)
 	},
 }
 

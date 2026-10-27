@@ -184,11 +184,22 @@ func ensureCLIConfig() error {
 }
 
 func studioImageRef(cfg *CLIConfig) string {
-	tag := "latest"
+	return studioImageRefForTag(studioTag(cfg))
+}
+
+func studioTag(cfg *CLIConfig) string {
 	if cfg != nil {
-		if pinned := strings.TrimSpace(cfg.StudioVersion); pinned != "" {
-			tag = pinned
+		if tag := strings.TrimSpace(cfg.StudioVersion); tag != "" {
+			return tag
 		}
+	}
+	return "latest"
+}
+
+func studioImageRefForTag(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		tag = "latest"
 	}
 	return "ghcr.io/apito-io/studio:" + tag
 }

@@ -91,6 +91,13 @@ The Apito CLI installs and runs a local engine and console, and talks to Apito C
 
 ## 🆕 **What's New in Latest Version**
 
+### v0.5.2 — Studio image check
+
+- `apito start` checks the public Studio tags on GHCR. A pinned tag shows the current image version and the latest tag, then asks before upgrading. `n` keeps the current image.
+- Start mounts `studio.nginx.conf` so the console stays on `4055` and the engine keeps `5055`. Published images through `v0.1.8` otherwise bind nginx to the engine port.
+- A busy `4055` or `5055` names the holder and asks to stop it, kill it, or skip.
+- Anonymous usage events stay off unless you answer yes. `DO_NOT_TRACK=1`, `APITO_TELEMETRY=0`, or `apito telemetry disable` turns them off.
+
 ### 🔄 **Automatic Version Management**
 
 - **Smart Version Tracking**: Automatically fetches and stores latest engine and console versions
@@ -181,7 +188,7 @@ apito --version
 
 The first command that needs `~/.apito` writes `config.yml`, `bin/.env.engine`, and `bin/.env.console` when they are missing, then prints one warning and continues. There is no setup prompt. `.env.engine` holds the engine settings, including a generated `BRANKA_KEY` and signing-key paths. `.env.console` holds the console URLs. `apito start` mounts both files into Studio and mounts `~/.apito/db` at `/data`.
 
-Pin a Studio image with `studio_version` in `~/.apito/config.yml`. Leave it empty to use the latest published `ghcr.io/apito-io/studio` tag.
+Pin a Studio image with `studio_version` in `~/.apito/config.yml`. Leave it empty to track the latest published `ghcr.io/apito-io/studio` tag. On every `apito start`, pinned tags are checked against the newest published tag and the CLI asks before upgrading; choosing `No` starts the pinned image.
 
 ### 1. Connect an account and create a project
 
@@ -198,7 +205,7 @@ apito create
 apito start
 ```
 
-This prepares `~/.apito` when the files are missing, pulls `ghcr.io/apito-io/studio`, and runs the `apito-studio` container. The console is at `http://localhost:4055`. The engine is at `http://localhost:5055`. The database stays in `~/.apito/db`. `apito stop`, `apito restart`, `apito status`, and `apito logs` talk to that container.
+This prepares `~/.apito` when the files are missing, checks for a newer Studio image, pulls the selected `ghcr.io/apito-io/studio` tag, and runs the `apito-studio` container. The console is at `http://localhost:4055`. The engine is at `http://localhost:5055`. The database stays in `~/.apito/db`. `apito stop`, `apito restart`, `apito status`, and `apito logs` talk to that container.
 
 ## 📚 Command Reference
 
@@ -206,7 +213,7 @@ This prepares `~/.apito` when the files are missing, pulls `ghcr.io/apito-io/stu
 
 #### Configuration
 
-`~/.apito/config.yml`, `~/.apito/bin/.env.engine`, and `~/.apito/bin/.env.console` are created with defaults the first time a command needs them. The CLI prints one warning and continues. `.env.engine` is also copied to `~/.apito/bin/.env`. Set `studio_version` to pin `ghcr.io/apito-io/studio`; leave it empty to track the latest published tag.
+`~/.apito/config.yml`, `~/.apito/bin/.env.engine`, and `~/.apito/bin/.env.console` are created with defaults the first time a command needs them. The CLI prints one warning and continues. `.env.engine` is also copied to `~/.apito/bin/.env`. Set `studio_version` to pin `ghcr.io/apito-io/studio`; leave it empty to track the latest published tag. Pinned tags never change unless you confirm the upgrade prompt.
 
 #### `migrate` - Copy a database onto an existing destination
 
@@ -1408,7 +1415,7 @@ engine_version: v1.2.0 # Downgrade to specific version
 console_version: latest # Use latest tag
 ```
 
-`studio_version` in the same file pins `ghcr.io/apito-io/studio`. Leave it empty to use the latest published tag. The next `apito start` pulls that tag.
+`studio_version` in the same file pins `ghcr.io/apito-io/studio`. Leave it empty to use the latest published tag. The next `apito start` checks for a newer tag, asks before replacing a pin, and falls back to a cached image when the registry cannot refresh it.
 
 ## 🚨 Troubleshooting
 

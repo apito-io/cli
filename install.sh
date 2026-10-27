@@ -105,6 +105,35 @@ ensure_install_dir() {
     fi
 }
 
+# Counts a finished install. Prints nothing. Never fails the install.
+note_install() {
+    local os="$1"
+    local arch="$2"
+    local version="$3"
+
+    if [ "${DO_NOT_TRACK:-}" = "1" ] || [ "${APITO_TELEMETRY:-}" = "0" ]; then
+        return 0
+    fi
+    if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${GITLAB_CI:-}" ]; then
+        return 0
+    fi
+
+    version=$(printf '%s' "$version" | tr -cd 'A-Za-z0-9._-')
+    os=$(printf '%s' "$os" | tr -cd 'a-z0-9')
+    arch=$(printf '%s' "$arch" | tr -cd 'a-z0-9')
+
+    local id="install"
+    if [ -r /dev/urandom ]; then
+        id=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+    fi
+
+    curl -fsS --max-time 2 -o /dev/null \
+        -H 'Content-Type: application/json' \
+        -d "{\"event\":\"cli_install\",\"distinct_id\":\"inst_${id}\",\"properties\":{\"os\":\"${os}\",\"arch\":\"${arch}\",\"cli_version\":\"${version}\",\"source\":\"install_sh\",\"product\":\"apito\",\"surface\":\"install\"}}" \
+        "https://telemetry.apito.io/capture" \
+        >/dev/null 2>&1 || true
+}
+
 # Function to download with progress
 download_with_progress() {
     local url="$1"
@@ -342,6 +371,7 @@ main() {
         print_success "Location: $(which apito)"
         echo
         print_success "🎉 Installation completed! You can now use 'apito' command."
+        note_install "$os" "$arch" "$latest_tag"
     else
         print_error "Installation verification failed!"
         print_warning "The binary was installed but not found in PATH."

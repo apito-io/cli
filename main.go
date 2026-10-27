@@ -25,6 +25,9 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&flagProject, "project", "", "Project id")
 	rootCmd.PersistentFlags().StringVar(&flagTenant, "tenant", "", "Tenant id")
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "Print machine-readable JSON")
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		noteCLICommand(cmd)
+	}
 
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(updateCmd)

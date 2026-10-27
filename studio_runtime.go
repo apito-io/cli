@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/manifoldco/promptui"
 )
 
 const studioContainerName = "apito-studio"
@@ -14,6 +18,65 @@ const studioPublishPort = "4055"
 
 // studioEnginePort is the port inside the container. The public engine refuses 5050.
 const studioEnginePort = "5055"
+
+func chooseStudioImage(cfg *CLIConfig) (image, upgradeTag string) {
+	currentTag := studioTag(cfg)
+	currentImage := studioImageRef(cfg)
+
+	latestTag, err := getLatestStudioVersion()
+	if err != nil {
+		print_warning("Could not check for Studio image updates: " + err.Error())
+		return currentImage, ""
+	}
+
+	if !studioUpgradeAvailable(currentTag, latestTag) {
+		return currentImage, ""
+	}
+
+	created, repoTags := inspectStudioImage(currentImage)
+	currentVersion := formatStudioCurrentVersion(currentTag, created, repoTags)
+	print_status("Current Studio version: " + currentVersion)
+	print_status("Latest Studio version: " + latestTag)
+	if !confirmStudioUpgrade(currentVersion, latestTag) {
+		print_status("Keeping current Studio image.")
+		return currentImage, ""
+	}
+
+	return studioImageRefForTag(latestTag), latestTag
+}
+
+func inspectStudioImage(image string) (time.Time, []string) {
+	cmd := exec.Command("docker", "image", "inspect", "-f", "{{.Created}}\t{{json .RepoTags}}", image)
+	out, err := cmd.Output()
+	if err != nil {
+		return time.Time{}, nil
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(out)), "\t", 2)
+	var created time.Time
+	if len(parts) > 0 {
+		created, _ = time.Parse(time.RFC3339Nano, parts[0])
+	}
+	var tags []string
+	if len(parts) == 2 && parts[1] != "" && parts[1] != "null" {
+		_ = json.Unmarshal([]byte(parts[1]), &tags)
+	}
+	return created, tags
+}
+
+func confirmStudioUpgrade(currentVersion, latestTag string) bool {
+	prompt := promptui.Prompt{
+		Label:     fmt.Sprintf("Upgrade Studio image %s → %s? (y/N)", currentVersion, latestTag),
+		IsConfirm: true,
+		Default:   "n",
+	}
+	answer, err := prompt.Run()
+	if err != nil {
+		print_status("Upgrade prompt unavailable; keeping current Studio image.")
+		return false
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	return answer == "y" || answer == "yes"
+}
 
 func startStudioContainer() error {
 	if err := ensureCLIConfig(); err != nil {
@@ -26,13 +89,36 @@ func startStudioContainer() error {
 	if err != nil {
 		return err
 	}
-	image := studioImageRef(cfg)
+	currentImage := studioImageRef(cfg)
+	image, upgradeTag := chooseStudioImage(cfg)
 	print_status("Pulling " + image)
 	if err := runDocker("pull", image); err != nil {
-		if !studioImagePresent(image) {
-			return fmt.Errorf("pull %s: %w", image, err)
+		if upgradeTag != "" {
+			print_warning(fmt.Sprintf("Could not upgrade Studio to %s: %v", upgradeTag, err))
+			if !studioImagePresent(currentImage) {
+				return fmt.Errorf("pull %s: %w", image, err)
+			}
+			image = currentImage
+			upgradeTag = ""
+			print_warning("Using the current Studio image already on this machine.")
+		} else {
+			if !studioImagePresent(image) {
+				return fmt.Errorf("pull %s: %w", image, err)
+			}
+			print_warning("Could not refresh " + image + ". Using the image already on this machine.")
 		}
-		print_warning("Could not refresh " + image + ". Using the image already on this machine.")
+	}
+
+	if upgradeTag != "" {
+		cfg.StudioVersion = upgradeTag
+		if err := saveCLIConfig(cfg); err != nil {
+			print_warning("Studio image upgraded, but could not save studio_version: " + err.Error())
+		} else {
+			print_success("Studio upgraded to " + upgradeTag)
+		}
+	}
+	if err := ensureStudioPortsFree(); err != nil {
+		return err
 	}
 	removeStudioContainer()
 	print_status("Starting " + studioContainerName)
@@ -51,8 +137,13 @@ func startStudioContainer() error {
 	if err := runDocker(args...); err != nil {
 		return fmt.Errorf("run studio: %w", err)
 	}
+	if err := waitForStudioReady(); err != nil {
+		return fmt.Errorf("studio container started, but it is not ready: %w", err)
+	}
 	print_success("Studio is running")
-	print_status("Console: http://localhost:" + studioPublishPort)
+	fmt.Println("  Console: http://localhost:" + studioPublishPort)
+	fmt.Println("  Admin:   http://localhost:" + studioPublishPort + "/admin")
+	fmt.Println("  Engine:  http://localhost:" + studioEnginePort)
 	printStudioLogin()
 	return nil
 }
@@ -137,10 +228,15 @@ func studioVolumeArgs() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error finding home directory: %w", err)
 	}
+	nginxPath, err := writeStudioNginx()
+	if err != nil {
+		return nil, err
+	}
 	return []string{
 		"-v", filepath.Join(home, ".apito", "db") + ":" + studioDataMount,
 		"-v", filepath.Join(home, ".apito", "bin", studioEngineEnvName) + ":/opt/apito/.env:ro",
 		"-v", filepath.Join(home, ".apito", "bin", studioConsoleEnvName) + ":/opt/apito/.env.console:ro",
+		"-v", nginxPath + ":/etc/nginx/http.d/default.conf:ro",
 	}, nil
 }
 

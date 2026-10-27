@@ -311,6 +311,7 @@ func saveNamedAccount(name, server, token, kind, consoleURL string) error {
 		return err
 	}
 	print_success(fmt.Sprintf("Saved account %s (%s)", name, kind))
+	noteLoginCompleted()
 	return nil
 }
 

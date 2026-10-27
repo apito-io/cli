@@ -9,6 +9,9 @@ func init() {
 	initTenantFlags()
 	initCloudFlags()
 
+	telemetryCmd.AddCommand(telemetryEnableCmd, telemetryDisableCmd, telemetryStatusCmd)
+	rootCmd.AddCommand(telemetryCmd)
+
 	rootCmd.AddCommand(loginCmd)
 
 	projectCmd.AddCommand(projectListCmd, projectOpenCmd)

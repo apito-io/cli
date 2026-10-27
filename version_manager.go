@@ -22,6 +22,7 @@ const (
 	githubReleasesURL = "https://api.github.com/repos/apito-io/%s/releases/latest"
 	engineImageName   = "engine"
 	consoleImageName  = "console"
+	studioImageName   = "studio"
 )
 
 // GitHubRelease represents a GitHub release response
@@ -36,6 +37,10 @@ type GHCRTagsResponse struct {
 	Tags []string `json:"tags"`
 }
 
+type GHCRTokenResponse struct {
+	Token string `json:"token"`
+}
+
 // getLatestEngineVersion fetches the latest engine version from GitHub releases
 func getLatestEngineVersion() (string, error) {
 	return getLatestVersionFromGitHub(engineImageName)
@@ -44,6 +49,102 @@ func getLatestEngineVersion() (string, error) {
 // getLatestConsoleVersion fetches the latest console version from GitHub releases
 func getLatestConsoleVersion() (string, error) {
 	return getLatestVersionFromGitHub(consoleImageName)
+}
+
+// getLatestStudioVersion fetches the newest semver-tagged Studio image from GHCR.
+// The registry token endpoint is public for this public package and avoids
+// requiring users to configure GitHub credentials just to start Studio.
+func getLatestStudioVersion() (string, error) {
+	return getLatestGHCRTag(studioImageName)
+}
+
+func getLatestGHCRTag(image string) (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	tokenURL := fmt.Sprintf(ghcrTokenURL, image)
+	tokenReq, err := http.NewRequest("GET", tokenURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GHCR token request: %w", err)
+	}
+	tokenReq.Header.Set("User-Agent", "apito-cli")
+	tokenReq.Header.Set("Accept", "application/json")
+
+	tokenResp, err := client.Do(tokenReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch GHCR token: %w", err)
+	}
+	defer tokenResp.Body.Close()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GHCR token endpoint returned status %d", tokenResp.StatusCode)
+	}
+
+	var token GHCRTokenResponse
+	if err := json.NewDecoder(tokenResp.Body).Decode(&token); err != nil {
+		return "", fmt.Errorf("failed to decode GHCR token: %w", err)
+	}
+	if strings.TrimSpace(token.Token) == "" {
+		return "", fmt.Errorf("GHCR token response was empty")
+	}
+
+	tagsURL := fmt.Sprintf(ghcrTagsURL, image)
+	tagsReq, err := http.NewRequest("GET", tagsURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GHCR tags request: %w", err)
+	}
+	tagsReq.Header.Set("User-Agent", "apito-cli")
+	tagsReq.Header.Set("Accept", "application/json")
+	tagsReq.Header.Set("Authorization", "Bearer "+token.Token)
+
+	tagsResp, err := client.Do(tagsReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch GHCR tags: %w", err)
+	}
+	defer tagsResp.Body.Close()
+
+	if tagsResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GHCR tags endpoint returned status %d", tagsResp.StatusCode)
+	}
+
+	var tags GHCRTagsResponse
+	if err := json.NewDecoder(tagsResp.Body).Decode(&tags); err != nil {
+		return "", fmt.Errorf("failed to decode GHCR tags: %w", err)
+	}
+
+	return latestSemverTag(tags.Tags)
+}
+
+func latestSemverTag(tags []string) (string, error) {
+	var latestTag string
+	var latestVersion *gover.Version
+
+	for _, tag := range tags {
+		rawTag := strings.TrimSpace(tag)
+		if rawTag == "" {
+			continue
+		}
+
+		version, err := gover.NewVersion(strings.TrimPrefix(rawTag, "v"))
+		if err != nil {
+			continue
+		}
+		if latestVersion == nil || version.GreaterThan(latestVersion) {
+			latestTag = rawTag
+			latestVersion = version
+		}
+	}
+
+	if latestTag != "" {
+		return latestTag, nil
+	}
+
+	for _, tag := range tags {
+		if strings.TrimSpace(tag) == "latest" {
+			return "latest", nil
+		}
+	}
+
+	return "", fmt.Errorf("no usable Studio image tags found")
 }
 
 // getLatestVersionFromGitHub fetches the latest version from GitHub releases
@@ -104,6 +205,71 @@ func compareVersions(currentVer, newVer string) (bool, error) {
 	}
 
 	return new.GreaterThan(current), nil
+}
+
+func formatStudioCurrentVersion(tag string, created time.Time, repoTags []string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		tag = "unknown"
+	}
+	if _, err := gover.NewVersion(strings.TrimPrefix(tag, "v")); err == nil {
+		return tag
+	}
+
+	seen := map[string]bool{}
+	var releaseTags []string
+	for _, repoTag := range repoTags {
+		name := repoTag
+		if i := strings.LastIndex(repoTag, ":"); i >= 0 {
+			name = repoTag[i+1:]
+		}
+		name = strings.TrimSpace(name)
+		if name == "" || name == tag || name == "latest" || seen[name] {
+			continue
+		}
+		if _, err := gover.NewVersion(strings.TrimPrefix(name, "v")); err != nil {
+			continue
+		}
+		seen[name] = true
+		releaseTags = append(releaseTags, name)
+	}
+	sort.Strings(releaseTags)
+
+	var parts []string
+	if len(releaseTags) > 0 {
+		parts = append(parts, "release "+strings.Join(releaseTags, ", "))
+	}
+	if !created.IsZero() {
+		parts = append(parts, "built "+created.Local().Format("2006-01-02"))
+	}
+	if len(parts) == 0 {
+		return tag
+	}
+	return fmt.Sprintf("%s (%s)", tag, strings.Join(parts, ", "))
+}
+
+func studioUpgradeAvailable(currentTag, latestTag string) bool {
+	currentTag = strings.TrimSpace(currentTag)
+	latestTag = strings.TrimSpace(latestTag)
+
+	// Empty StudioVersion and the latest tag are both tracking modes. Their
+	// normal pull already refreshes the image on every start.
+	if currentTag == "" || currentTag == "latest" || latestTag == "" || currentTag == latestTag {
+		return false
+	}
+	if latestTag == "latest" {
+		return true
+	}
+
+	currentVersion, currentErr := gover.NewVersion(strings.TrimPrefix(currentTag, "v"))
+	latestVersion, latestErr := gover.NewVersion(strings.TrimPrefix(latestTag, "v"))
+	if currentErr == nil && latestErr == nil {
+		return latestVersion.GreaterThan(currentVersion)
+	}
+
+	// Non-semver pins such as "local" are still eligible for an explicit
+	// upgrade to the newest published image.
+	return true
 }
 
 // checkForComponentUpdates checks if updates are available for engine and console
