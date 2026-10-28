@@ -85,6 +85,9 @@ func TestEnsureStudioFilesLinksEnvVolumeAndKeys(t *testing.T) {
 	if console["VITE_GRAPH_API"] != "http://localhost:4055/system/graphql" {
 		t.Fatalf("console graph api = %q", console["VITE_GRAPH_API"])
 	}
+	if console["VITE_PUBLIC_GRAPH_API"] != "http://localhost:4055/secured/graphql" {
+		t.Fatalf("console public graph api = %q", console["VITE_PUBLIC_GRAPH_API"])
+	}
 
 	priv := filepath.Join(home, ".apito", "db", "keys", "private.key")
 	pub := filepath.Join(home, ".apito", "db", "keys", "public.key")

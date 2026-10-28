@@ -78,7 +78,7 @@ func studioConsoleEnv() map[string]string {
 	return map[string]string{
 		"VITE_REST_API":         origin,
 		"VITE_GRAPH_API":        origin + "/system/graphql",
-		"VITE_PUBLIC_GRAPH_API": origin + "/system/graphql",
+		"VITE_PUBLIC_GRAPH_API": origin + "/secured/graphql",
 		"VITE_GRAPH_SUBS_API":   "ws://localhost:" + studioPublishPort + "/system/graphql/subscription",
 		"VITE_AUTH_PROVIDER":    "local",
 		"VITE_COOKIE_DOMAIN":    "localhost",

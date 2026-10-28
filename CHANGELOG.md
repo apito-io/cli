@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.4
+
+- Studio console env points the content explorer at `/secured/graphql`. The system explorer stays on `/system/graphql`.
+
 ## v0.5.3
 
 - `apito create` sends `X-Use-Cookies: false` and exits non-zero when the project is not created.
