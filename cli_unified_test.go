@@ -855,6 +855,7 @@ func TestMCPServeUsesCapabilityEdition(t *testing.T) {
 	}
 	flagAccount = "lab"
 	flagProject = "project-1"
+	mcpTransport = "stdio"
 	var edition, allow, token string
 	mcpCommand = func() (string, []string, error) { return "apito-mcp", nil, nil }
 	mcpRun = func(_ string, _ []string, env []string) error {
@@ -876,6 +877,7 @@ func TestMCPServeUsesCapabilityEdition(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		flagAccount, flagProject = "", ""
+		mcpTransport = ""
 		mcpCommand = defaultMCPCommand
 		mcpRun = defaultMCPRun
 	})

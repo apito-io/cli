@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,15 +16,13 @@ var installMCPRuntime = defaultInstallMCPRuntime
 
 var mcpConnectCmd = &cobra.Command{
 	Use:   "connect [account-name]",
-	Short: "Approve MCP access and install the local MCP runtime",
-	Long: `Choose where this MCP account connects.
+	Short: "Approve MCP access and print the client config",
+	Long: `Choose an account the same way as apito login.
 
-Local asks the engine on this machine for a code, then opens the console MCP page.
-Cloud uses Apito Cloud and opens the console URL that server returns.
-Custom asks for a server URL and uses the same browser approval.
-
-The MCP token is stored separately from the CLI token. apito mcp serve stays a
-foreground process that Cursor or Claude launches.`,
+Local, Cloud, and Custom use the same list. A saved account is listed too.
+The choice builds the MCP URL. The command then prints one JSON config.
+Cursor, Claude, OpenAI, and VS Code use that same JSON. The old apito-mcp
+package is deprecated and is not downloaded.`,
 	RunE: runMCPConnect,
 }
 
@@ -33,6 +33,16 @@ func runMCPConnect(cmd *cobra.Command, args []string) error {
 	name := strings.TrimSpace(flagAccount)
 	if name == "" && len(args) > 0 {
 		name = strings.TrimSpace(args[0])
+	}
+	if strings.TrimSpace(loginKind) == "" && name == "" {
+		choice, err := promptMCPConnectChoice()
+		if err != nil {
+			return err
+		}
+		if choice.Kind == "account" {
+			return mcpConnectExisting(choice.Account)
+		}
+		loginKind = choice.Kind
 	}
 	kind, err := resolveMCPKind()
 	if err != nil {
@@ -167,11 +177,8 @@ func mcpConnectBrowser(name, server, kind string) error {
 			}); err != nil {
 				return err
 			}
-			if err := installMCPRuntime(true); err != nil {
-				return err
-			}
 			print_success(fmt.Sprintf("Saved MCP access for account %s (%s)", name, kind))
-			return nil
+			return printMCPClientConfig(server, kind)
 		case "pending":
 			time.Sleep(time.Duration(interval) * time.Second)
 		case "expired", "denied":
@@ -247,6 +254,129 @@ func saveNamedMCPAccount(name string, grant mcpAccountGrant) error {
 	if err := saveCLIConfig(cfg); err != nil {
 		return err
 	}
+	return nil
+}
+
+type mcpConnectChoice struct {
+	Label   string
+	Kind    string
+	Account string
+}
+
+func mcpConnectChoices(cfg *CLIConfig) []mcpConnectChoice {
+	var choices []mcpConnectChoice
+	if cfg != nil {
+		names := getAccountNames(cfg)
+		sort.Strings(names)
+		for _, name := range names {
+			acc := cfg.Accounts[name]
+			url, err := mcpPublicURL(acc)
+			if err != nil {
+				url = acc.ServerURL
+			}
+			label := name + " (" + url + ")"
+			if name == cfg.DefaultAccount {
+				label += " (default)"
+			}
+			choices = append(choices, mcpConnectChoice{Label: label, Kind: "account", Account: name})
+		}
+	}
+	choices = append(choices,
+		mcpConnectChoice{Label: "Local (console " + localConsoleURL + ")", Kind: "local"},
+		mcpConnectChoice{Label: "Cloud (" + cloudLoginServer + ")", Kind: "cloud"},
+		mcpConnectChoice{Label: "Custom (enter a server URL)", Kind: "custom"},
+	)
+	return choices
+}
+
+func promptMCPConnectChoice() (mcpConnectChoice, error) {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return mcpConnectChoice{}, fmt.Errorf("choose a connection with --kind local, --kind cloud, or --kind custom")
+	}
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return mcpConnectChoice{}, err
+	}
+	choices := mcpConnectChoices(cfg)
+	labels := make([]string, len(choices))
+	for i, choice := range choices {
+		labels[i] = choice.Label
+	}
+	prompt := promptui.Select{
+		Label: "Where should this account connect?",
+		Items: labels,
+		Size:  len(labels),
+	}
+	index, _, err := prompt.Run()
+	if err != nil {
+		return mcpConnectChoice{}, fmt.Errorf("MCP connect cancelled")
+	}
+	return choices[index], nil
+}
+
+func mcpConnectExisting(name string) error {
+	acc, err := getAccountConfig(name)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(acc.MCPAccessToken) == "" {
+		kind := inferMCPDeployment(acc.ServerURL, acc.Kind)
+		server := strings.TrimSuffix(strings.TrimSpace(acc.ServerURL), "/")
+		if server == "" {
+			return fmt.Errorf("account %s has no server URL", name)
+		}
+		return mcpConnectBrowser(name, server, kind)
+	}
+	print_success(fmt.Sprintf("Using MCP account %s", name))
+	return printMCPClientConfig(acc.ServerURL, acc.Kind)
+}
+
+func mcpPublicURL(account AccountConfig) (string, error) {
+	target, err := resolveMCPHTTPTarget(account)
+	if err != nil {
+		return "", err
+	}
+	return target.PublicURL, nil
+}
+
+func mcpClientConfigJSON(rawURL string) ([]byte, error) {
+	doc := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"apito": map[string]interface{}{
+				"type": "http",
+				"url":  rawURL,
+			},
+		},
+	}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(raw, '\n'), nil
+}
+
+func printMCPClientConfig(server, kind string) error {
+	url, err := mcpPublicURL(AccountConfig{ServerURL: server, Kind: kind})
+	if err != nil {
+		return err
+	}
+	body, err := mcpClientConfigJSON(url)
+	if err != nil {
+		return err
+	}
+	client := strings.ToLower(strings.TrimSpace(mcpClient))
+	if client == "" {
+		client = "all"
+	}
+	fmt.Fprintf(os.Stderr, "MCP URL: %s\n", url)
+	switch client {
+	case "cursor", "claude", "openai", "vscode", "all":
+		fmt.Fprintln(os.Stderr, "Paste this JSON into Cursor, Claude, OpenAI, or VS Code. The config is the same.")
+	default:
+		return fmt.Errorf("--client must be cursor, claude, openai, vscode, or all")
+	}
+	fmt.Print(string(body))
 	return nil
 }
 

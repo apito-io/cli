@@ -174,25 +174,16 @@ func performSelfUpgrade(latestVersion string) error {
 		return fmt.Errorf("failed to get current binary path: %v", err)
 	}
 
-	// Create backup of current binary
+	installDir := filepath.Dir(currentBinary)
 	backupPath := currentBinary + ".backup"
-	if err := copyFile(currentBinary, backupPath); err != nil {
+	if err := backupBinary(currentBinary, backupPath, installDir); err != nil {
 		fmt.Printf("Warning: Could not create backup: %v\n", err)
 	} else {
 		fmt.Printf("📋 Created backup: %s\n", backupPath)
-		defer func() {
-			// Clean up backup on success
-			os.Remove(backupPath)
-		}()
+		defer removeBinary(backupPath, installDir)
 	}
 
-	// Replace current binary
-	installDir := filepath.Dir(currentBinary)
 	if err := installBinary(newBinaryPath, currentBinary, installDir); err != nil {
-		// Restore backup if installation fails
-		if _, backupErr := os.Stat(backupPath); backupErr == nil {
-			copyFile(backupPath, currentBinary)
-		}
 		return fmt.Errorf("failed to install new binary: %v", err)
 	}
 
@@ -231,9 +222,38 @@ func copyFile(src, dst string) error {
 	return os.Chmod(dst, sourceInfo.Mode())
 }
 
+// privilegedReplaceCommands stages a new binary beside dest, then renames it
+// into place. cp must not open the running binary for write.
+func privilegedReplaceCommands(srcPath, destPath string) [][]string {
+	staged := destPath + ".new"
+	return [][]string{
+		{"cp", srcPath, staged},
+		{"chmod", "755", staged},
+		{"mv", staged, destPath},
+	}
+}
+
+func privilegedBackupCommands(srcPath, backupPath string) [][]string {
+	return [][]string{{"cp", srcPath, backupPath}}
+}
+
+func backupBinary(srcPath, backupPath, installDir string) error {
+	if isWritable(installDir) {
+		return copyFile(srcPath, backupPath)
+	}
+	return runPrivileged(privilegedBackupCommands(srcPath, backupPath))
+}
+
+func removeBinary(path, installDir string) {
+	if isWritable(installDir) {
+		_ = os.Remove(path)
+		return
+	}
+	_ = runPrivileged([][]string{{"rm", "-f", path}})
+}
+
 // installBinary installs a binary to the target location with proper permissions
 func installBinary(srcPath, destPath, installDir string) error {
-	// Check if we can write to the install directory
 	if isWritable(installDir) {
 		staged := destPath + ".new"
 		if err := copyFile(srcPath, staged); err != nil {
@@ -250,26 +270,31 @@ func installBinary(srcPath, destPath, installDir string) error {
 		return nil
 	}
 
-	// Try with sudo
 	if !commandExists("sudo") {
 		return fmt.Errorf("cannot write to %s and sudo is not available", installDir)
 	}
 
 	fmt.Println("🔐 Requesting sudo permissions to install binary...")
+	return runPrivileged(privilegedReplaceCommands(srcPath, destPath))
+}
 
-	// Use sudo to copy and set permissions
-	copyCmd := exec.Command("sudo", "cp", srcPath, destPath)
-	copyCmd.Stdout = os.Stdout
-	copyCmd.Stderr = os.Stderr
-	if err := copyCmd.Run(); err != nil {
-		return fmt.Errorf("sudo cp failed: %v", err)
+func runPrivileged(commands [][]string) error {
+	for _, args := range commands {
+		cmd := exec.Command("sudo", args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			staged := ""
+			if len(commands) > 0 && len(commands[0]) >= 3 {
+				staged = commands[0][len(commands[0])-1]
+			}
+			if staged != "" && strings.HasSuffix(staged, ".new") {
+				cleanup := exec.Command("sudo", "rm", "-f", staged)
+				_ = cleanup.Run()
+			}
+			return fmt.Errorf("sudo %s failed: %v", args[0], err)
+		}
 	}
-
-	chmodCmd := exec.Command("sudo", "chmod", "755", destPath)
-	if err := chmodCmd.Run(); err != nil {
-		return fmt.Errorf("sudo chmod failed: %v", err)
-	}
-
 	return nil
 }
 

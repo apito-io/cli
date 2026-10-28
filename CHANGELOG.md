@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.5
+
+- `apito sync` uses `--project` when it is set and does not open the project picker.
+- `apito self-upgrade` stages the new binary and renames it over the running one, including the sudo path.
+- `apito status` shows the local Studio container, image version, console and engine ports, which endpoints are live, and the admin email. The password stays hidden. A down or degraded Studio exits non-zero.
+- `apito mcp connect` lists saved accounts and the same Local, Cloud, and Custom choices as `apito login`. The choice builds the MCP URL and prints one HTTP JSON config for Cursor, Claude, OpenAI, and VS Code. The deprecated `apito-mcp` package is not downloaded.
+
 ## v0.5.4
 
 - Studio console env points the content explorer at `/secured/graphql`. The system explorer stays on `/system/graphql`.

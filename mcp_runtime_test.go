@@ -146,6 +146,7 @@ func TestMCPServeUsesSingleProjectDefaultWithoutCLIToken(t *testing.T) {
 	flagProject = ""
 	flagTenant = ""
 	var got string
+	mcpTransport = "stdio"
 	mcpCommand = func() (string, []string, error) { return "node", []string{"server.mjs"}, nil }
 	mcpRun = func(_ string, args []string, env []string) error {
 		got = strings.Join(append(args, env...), "\n")
@@ -153,6 +154,7 @@ func TestMCPServeUsesSingleProjectDefaultWithoutCLIToken(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		flagAccount, flagProject, flagTenant = "", "", ""
+		mcpTransport = ""
 		mcpCommand = defaultMCPCommand
 		mcpRun = defaultMCPRun
 	})
@@ -162,11 +164,12 @@ func TestMCPServeUsesSingleProjectDefaultWithoutCLIToken(t *testing.T) {
 	if !strings.Contains(got, "APITO_AUTH_TOKEN=apt_onlymcp") || !strings.Contains(got, "APITO_DEFAULT_PROJECT_ID=only") || !strings.Contains(got, "TENANT_ID=tenant-1") {
 		t.Fatalf("serve env = %s", got)
 	}
+	mcpTransport = ""
 	body, err := buildMCPConfig("local", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(body), "apt_") || !strings.Contains(string(body), "--project") || !strings.Contains(string(body), "only") {
+	if strings.Contains(string(body), "apt_") || !strings.Contains(string(body), `"type": "http"`) || !strings.Contains(string(body), "http://localhost:4055/mcp") {
 		t.Fatalf("config = %s", body)
 	}
 }

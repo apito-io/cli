@@ -15,26 +15,21 @@ var statusCmd = &cobra.Command{
 	Use:   "status [--db system|project]",
 	Short: "Show the public Studio container status",
 	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		dbType, _ := cmd.Flags().GetString("db")
 		if dbType == "" {
-			if err := studioStatus(); err != nil {
-				print_error(err.Error())
-			}
-			return
+			return studioStatus()
 		}
 		mode, _ := determineRunMode()
 		if mode == "docker" {
 			if err := ensureDockerAndComposeAvailable(); err != nil {
-				print_error("Docker not available: " + err.Error())
-				return
+				return fmt.Errorf("docker not available: %w", err)
 			}
 
 			// Check main services (engine/console)
 			engine, console, err := dockerComposePs()
 			if err != nil {
-				print_error("Failed to get docker status: " + err.Error())
-				return
+				return fmt.Errorf("failed to get docker status: %w", err)
 			}
 
 			// Check database status if db-compose.yml exists
@@ -49,24 +44,25 @@ var statusCmd = &cobra.Command{
 				} else if args[0] == "console" {
 					showDockerService("console", console)
 				} else {
-					print_error("Unknown service: " + args[0])
+					return fmt.Errorf("unknown service: %s", args[0])
 				}
-				return
+				return nil
 			}
 
 			showDockerService("engine", engine)
 			fmt.Println()
 			showDockerService("console", console)
-			return
+			return nil
 		}
 
 		if len(args) == 1 {
 			showServiceStatus(args[0])
-			return
+			return nil
 		}
 		showServiceStatus("engine")
 		fmt.Println()
 		showServiceStatus("console")
+		return nil
 	},
 }
 

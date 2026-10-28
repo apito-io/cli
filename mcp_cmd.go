@@ -128,10 +128,12 @@ func mcpRuntime() string {
 	case "http":
 		return "http"
 	}
-	if strings.EqualFold(strings.TrimSpace(mcpTransport), "http") {
+	switch strings.ToLower(strings.TrimSpace(mcpTransport)) {
+	case "stdio", "node":
+		return "node"
+	default:
 		return "http"
 	}
-	return "node"
 }
 
 func resolveMCPConfigAccount(account string) (string, error) {
@@ -399,6 +401,7 @@ func defaultMCPRun(bin string, args []string, env []string) error {
 func initMCPFlags() {
 	mcpConnectCmd.Flags().StringVar(&loginKind, "kind", "", "local, cloud, or custom")
 	mcpConnectCmd.Flags().StringVar(&loginServer, "server", "", "Server URL for --kind custom")
+	mcpConnectCmd.Flags().StringVar(&mcpClient, "client", "", "cursor, claude, openai, vscode, or all")
 	mcpConfigCmd.Flags().StringVar(&mcpClient, "client", "cursor", "cursor or claude")
 	mcpConfigCmd.Flags().BoolVar(&mcpStdout, "stdout", true, "Print the config")
 	mcpConfigCmd.Flags().StringVar(&mcpOut, "out", "", "Also write the config to this file (mode 0600)")

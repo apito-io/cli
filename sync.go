@@ -283,6 +283,21 @@ func selectAccountForSync(label string) (string, error) {
 	return selected, nil
 }
 
+// chooseSyncProject honors --project. An empty flag leaves the picker in charge.
+// A set flag never falls through to a prompt.
+func chooseSyncProject(projects []SyncProject, flagID, side string) (SyncProject, bool, error) {
+	id := strings.TrimSpace(flagID)
+	if id == "" {
+		return SyncProject{}, false, nil
+	}
+	for _, p := range projects {
+		if p.ID == id {
+			return p, true, nil
+		}
+	}
+	return SyncProject{}, false, fmt.Errorf("%s project %q was not found for this account", side, id)
+}
+
 func projectTypeLabel(p SyncProject) string {
 	if p.ProjectType == "" {
 		return "general"
@@ -297,6 +312,14 @@ func selectSyncProject(baseClient *SyncGraphQLClient, side string) (SyncProject,
 	}
 	if len(projects) == 0 {
 		return SyncProject{}, fmt.Errorf("no projects available on %s account — ensure the access token includes project_ids (Console → Access Token) and restart the engine if you upgraded recently", side)
+	}
+
+	if chosen, ok, err := chooseSyncProject(projects, flagProject, side); err != nil {
+		return SyncProject{}, err
+	} else if ok {
+		print_check(fmt.Sprintf("%s project: %s [%s] (%s)", side, chosen.Name, projectTypeLabel(chosen), chosen.ID))
+		profile, err := baseClient.WithProject(chosen.ID).CurrentProject()
+		return validateSelectedProjectAccess(side, chosen, profile, err)
 	}
 
 	if len(projects) == 1 {
