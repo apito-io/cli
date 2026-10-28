@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.7
+
+- `apito mcp serve` bridges stdio to the engine HTTP MCP endpoint. It does not start a separate `apito-mcp` server.
+- Studio nginx forwards `$http_host` and `X-Forwarded-Port`, so the MCP token exchange resource stays `http://localhost:4055/mcp`.
+
 ## v0.5.6
 
 - `apito sync` reads the destination access token before it writes. A CLI login token stops the sync and asks for a new login with the CLI sync preset, or a custom token that includes the missing capability. A dry run warns and still reads. `--yes` stops without a prompt.

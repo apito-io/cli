@@ -61,26 +61,15 @@ var mcpConfigCmd = &cobra.Command{
 
 var mcpUpdateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Download the latest verified MCP runtime",
+	Short: "There is no separate MCP runtime to download",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := installMCPRuntime(true); err != nil {
-			return err
-		}
-		path, err := installedMCPServer()
-		if err != nil {
-			return err
-		}
-		if path == "" {
-			return fmt.Errorf("MCP runtime is not installed. Run apito mcp update again when the release can be reached")
-		}
-		print_success("MCP runtime ready at " + path)
-		return nil
+		return fmt.Errorf("apito mcp does not install a separate server. The engine serves MCP over HTTP")
 	},
 }
 
 var mcpServeCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Run the local MCP runtime on stdio with the selected account",
+	Short: "Bridge stdio to the engine MCP endpoint",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, err := resolveMCPServeContext()
 		if err != nil {
@@ -92,32 +81,14 @@ var mcpServeCmd = &cobra.Command{
 		if strings.TrimSpace(ctx.ProjectID) == "" {
 			return fmt.Errorf("a project is required. Pass --project")
 		}
-		if mcpRuntime() == "http" {
-			target, err := resolveMCPHTTPTarget(ctx.Account)
-			if err != nil {
-				return err
-			}
-			return runMCPStdioBridge(target, ctx.Account.MCPAccessToken, os.Stdin, os.Stdout, nil)
+		if mcpRuntime() != "http" {
+			return fmt.Errorf("apito mcp serve does not start a separate MCP server. The engine serves MCP over HTTP")
 		}
-		bin, argv, err := mcpCommand()
+		target, err := resolveMCPHTTPTarget(ctx.Account)
 		if err != nil {
 			return err
 		}
-		edition := "open"
-		if ctx.Caps.Has(capTenantCatalog) || ctx.Caps.Has(capClientLifecycle) || ctx.Caps.Has(capManagedBackups) {
-			edition = "pro"
-		}
-		env := append(os.Environ(),
-			"APITO_GRAPHQL_ENDPOINT="+strings.TrimSuffix(ctx.Account.ServerURL, "/")+"/system/graphql",
-			"APITO_AUTH_TOKEN="+ctx.Account.MCPAccessToken,
-			"APITO_MCP_EDITION="+edition,
-			"APITO_DEFAULT_PROJECT_ID="+ctx.ProjectID,
-			"APITO_ALLOWED_PROJECT_IDS="+mcpAllowedProjects(ctx.Account, ctx.ProjectID),
-		)
-		if ctx.TenantID != "" {
-			env = append(env, "TENANT_ID="+ctx.TenantID, "APITO_TENANT_ID="+ctx.TenantID)
-		}
-		return mcpRun(bin, argv, env)
+		return runMCPStdioBridge(target, ctx.Account.MCPAccessToken, os.Stdin, os.Stdout, nil)
 	},
 }
 

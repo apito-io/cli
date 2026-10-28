@@ -145,11 +145,10 @@ func TestMCPServeUsesSingleProjectDefaultWithoutCLIToken(t *testing.T) {
 	flagAccount = ""
 	flagProject = ""
 	flagTenant = ""
-	var got string
 	mcpTransport = "stdio"
-	mcpCommand = func() (string, []string, error) { return "node", []string{"server.mjs"}, nil }
-	mcpRun = func(_ string, args []string, env []string) error {
-		got = strings.Join(append(args, env...), "\n")
+	called := false
+	mcpRun = func(_ string, _ []string, _ []string) error {
+		called = true
 		return nil
 	}
 	t.Cleanup(func() {
@@ -158,11 +157,9 @@ func TestMCPServeUsesSingleProjectDefaultWithoutCLIToken(t *testing.T) {
 		mcpCommand = defaultMCPCommand
 		mcpRun = defaultMCPRun
 	})
-	if err := mcpServeCmd.RunE(mcpServeCmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(got, "APITO_AUTH_TOKEN=apt_onlymcp") || !strings.Contains(got, "APITO_DEFAULT_PROJECT_ID=only") || !strings.Contains(got, "TENANT_ID=tenant-1") {
-		t.Fatalf("serve env = %s", got)
+	err := mcpServeCmd.RunE(mcpServeCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "does not start a separate MCP server") || called {
+		t.Fatalf("serve err=%v called=%v", err, called)
 	}
 	mcpTransport = ""
 	body, err := buildMCPConfig("local", "", false)

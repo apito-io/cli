@@ -824,9 +824,6 @@ func TestGenArtifactModeAndGoModule(t *testing.T) {
 func TestMCPServeUsesCapabilityEdition(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("APITO_MCP_COMMAND", "")
-	if _, _, err := defaultMCPCommand(); err == nil || !strings.Contains(err.Error(), "Node.js is required") {
-		t.Fatalf("missing node: %v", err)
-	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -855,24 +852,10 @@ func TestMCPServeUsesCapabilityEdition(t *testing.T) {
 	}
 	flagAccount = "lab"
 	flagProject = "project-1"
-	mcpTransport = "stdio"
-	var edition, allow, token string
-	mcpCommand = func() (string, []string, error) { return "apito-mcp", nil, nil }
-	mcpRun = func(_ string, _ []string, env []string) error {
-		joined := strings.Join(env, "\n")
-		if strings.Contains(joined, "apt_cli_not_for_mcp") {
-			t.Fatal("serve used the CLI token")
-		}
-		for _, item := range env {
-			switch {
-			case strings.HasPrefix(item, "APITO_MCP_EDITION="):
-				edition = strings.TrimPrefix(item, "APITO_MCP_EDITION=")
-			case strings.HasPrefix(item, "APITO_ALLOWED_PROJECT_IDS="):
-				allow = strings.TrimPrefix(item, "APITO_ALLOWED_PROJECT_IDS=")
-			case strings.HasPrefix(item, "APITO_AUTH_TOKEN="):
-				token = strings.TrimPrefix(item, "APITO_AUTH_TOKEN=")
-			}
-		}
+	mcpTransport = "node"
+	called := false
+	mcpRun = func(string, []string, []string) error {
+		called = true
 		return nil
 	}
 	t.Cleanup(func() {
@@ -881,11 +864,9 @@ func TestMCPServeUsesCapabilityEdition(t *testing.T) {
 		mcpCommand = defaultMCPCommand
 		mcpRun = defaultMCPRun
 	})
-	if err := mcpServeCmd.RunE(mcpServeCmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	if edition != "pro" || token != "apt_mcp" || allow != "project-1,project-2" {
-		t.Fatalf("edition=%s token=%s allow=%s", edition, token, allow)
+	err := mcpServeCmd.RunE(mcpServeCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "does not start a separate MCP server") || called {
+		t.Fatalf("serve err=%v called=%v", err, called)
 	}
 	flagProject = ""
 	if err := mcpServeCmd.RunE(mcpServeCmd, nil); err == nil || !strings.Contains(err.Error(), "--project") {
