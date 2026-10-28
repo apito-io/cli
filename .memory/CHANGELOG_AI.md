@@ -1,5 +1,11 @@
 # cli — AI Changelog
 
+## 2026-10-27 — CLI v0.5.2
+
+- **Changed:** Committed the Studio upgrade prompt, nginx port fix, busy-port prompt, and opt-in telemetry as `40d170a`. Tagged **v0.5.2** locally. Added `CHANGELOG.md` and a README v0.5.2 section.
+- **Why:** `apito start` needed a released binary that asks before replacing a pinned Studio image and does not let nginx take the engine port.
+- **Affected:** `apito/cli` `main`. Live start kept `studio_version: v0.1.8`. Not pushed. Ask before `./command.sh save`.
+
 ## 2026-10-25 — Studio nginx leaves 5055 for the engine
 
 - **Changed:** `apito start` writes and mounts `studio.nginx.conf` so nginx listens on 4055 and proxies API paths, including `/admin`, to the engine on 5055.

@@ -1,5 +1,12 @@
 # CLI — Handoff
 
+## CLI v0.5.2 (2026-10-27)
+
+- **Done:** Commit `40d170a`. Local tag **v0.5.2**. Changelog in `CHANGELOG.md` and the README. Not pushed.
+- **Verified:** `go test ./...` passed. Live `/tmp/apito-v052 start` declined telemetry, saw no upgrade prompt because GHCR's newest tag is `v0.1.8`, stopped the old `apito-studio`, and started the same image with the nginx mount. Console `200`, engine `200`, `/admin` `404`. `studio_version` stayed `v0.1.8`.
+- **Not done:** No push. No GitHub release.
+- **Do not:** Push `v0.5.2` until asked. Do not change `studio_version`.
+
 ## Studio image upgrade check (2026-10-25)
 
 - **Done:** `apito start` discovers the newest semver Studio tag from public GHCR, prompts before replacing a pinned `studio_version` (including `local`), shows the current image version, persists only after the pull succeeds, and falls back to the cached image on a declined or failed refresh. Docs and unit tests updated.
