@@ -436,6 +436,11 @@ func runLocalSchemaSync(fromName, toName string, timeout int, dryRun, autoYes, i
 		if bpCfg != nil {
 			endpoints.FromProject = bpCfg.asSyncProject()
 		}
+		refreshed, err := ensureSyncWriteToken(remoteClient, remoteName, remoteCfg, "schema", false, dryRun, autoYes)
+		if err != nil {
+			return err
+		}
+		remoteClient = refreshed.WithProject(project.ID)
 		return runSchemaSyncFromModels(models, remoteClient, endpoints, dryRun, autoYes, includeDeletes)
 	}
 

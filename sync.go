@@ -216,6 +216,13 @@ func runSyncCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	refreshed, err := ensureSyncWriteToken(toBase, toName, toCfg, kind, syncDeploy, syncDryRun, syncYes)
+	if err != nil {
+		return err
+	}
+	toBase = refreshed
+	toClient = toBase.WithProject(toProject.ID)
+
 	print_status(fmt.Sprintf("Syncing %s: %q (%s) -> %q (%s)", kind, fromProject.Name, fromProject.ID, toProject.Name, toProject.ID))
 
 	endpoints := SyncEndpoints{

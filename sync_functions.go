@@ -192,6 +192,11 @@ func runLocalFunctionSync(fromName, toName string, timeout int, deploy, includeS
 	if isFilesystemSyncSide(fromName) {
 		// filesystem → project (import); --deploy applies to the destination engine.
 		print_status(fmt.Sprintf("Importing functions: %s -> %s", localEndpoint.label, remoteEndpoint.label))
+		refreshed, err := ensureSyncWriteToken(remoteClient, remoteName, remoteCfg, "functions", deploy, dryRun, autoYes)
+		if err != nil {
+			return err
+		}
+		remoteEndpoint.client = refreshed.WithProject(project.ID)
 		return runFunctionSyncEndpoints(localEndpoint, remoteEndpoint, deploy, includeSecrets, dryRun, autoYes)
 	}
 	// project → filesystem (export); deploy is not applicable to a directory.

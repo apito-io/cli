@@ -292,6 +292,8 @@ func relationStorageChanging(fromRel, toRel, targetFrom, targetTo string) bool {
 }
 
 func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
+	sourceModels = sanitizeBlueprintModels(sourceModels)
+	destModels = sanitizeBlueprintModels(destModels)
 	srcMap := make(map[string]SyncModel, len(sourceModels))
 	dstMap := make(map[string]SyncModel, len(destModels))
 	for _, m := range sourceModels {

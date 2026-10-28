@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.6
+
+- `apito sync` reads the destination access token before it writes. A CLI login token stops the sync and asks for a new login with the CLI sync preset, or a custom token that includes the missing capability. A dry run warns and still reads. `--yes` stops without a prompt.
+- Schema sync drops engine-owned `system_` fields, so they are not added to the destination model.
+
 ## v0.5.5
 
 - `apito sync` uses `--project` when it is set and does not open the project picker.
