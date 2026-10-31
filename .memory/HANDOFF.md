@@ -1,5 +1,15 @@
 # CLI — Handoff
 
+## CLI v0.5.7 (2026-10-29)
+
+- **Done:** Commit `c87c3f9`. Tag **v0.5.7** pushed. Release workflow
+  succeeded.
+- **Behavior:** `apito mcp serve` refuses the Node server. Studio nginx
+  keeps port 4055 on the MCP proxy.
+- **Not done:** No live `apito start` against `v0.1.14` in this session.
+  Memory is not committed.
+- **Do not:** `./command.sh save` until asked.
+
 ## CLI v0.5.2 (2026-10-27)
 
 - **Done:** Commit `40d170a`. Local tag **v0.5.2**. Changelog in `CHANGELOG.md` and the README. Not pushed.

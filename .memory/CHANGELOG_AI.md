@@ -1,5 +1,15 @@
 # cli — AI Changelog
 
+## 2026-10-29 — CLI v0.5.7
+
+- **Changed:** `apito mcp serve` bridges to the engine HTTP MCP endpoint.
+  Studio nginx forwards the public host port. Tagged and pushed `v0.5.7`
+  (`c87c3f9`).
+- **Why:** Serve could still launch the retired `apito-mcp` package, and
+  `$host` dropped `:4055`, so token exchange failed.
+- **Affected:** `mcp_cmd.go`, `studio.nginx.conf`. GitHub release succeeded.
+  Ask before `./command.sh save`.
+
 ## 2026-10-27 — CLI v0.5.2
 
 - **Changed:** Committed the Studio upgrade prompt, nginx port fix, busy-port prompt, and opt-in telemetry as `40d170a`. Tagged **v0.5.2** locally. Added `CHANGELOG.md` and a README v0.5.2 section.

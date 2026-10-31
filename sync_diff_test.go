@@ -717,8 +717,82 @@ func TestComputeSchemaDiff_MissingReverseDoesNotInventMigration(t *testing.T) {
 		Name: "lab_test",
 	}}
 	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
-	if len(changes) != 0 {
-		t.Fatalf("missing reverse must keep the forward match, got %#v", changes)
+	if len(changes) != 1 {
+		t.Fatalf("missing reverse must be one repair, got %#v", changes)
+	}
+	ch := changes[0]
+	if ch.Kind != ChangeUpdateConnection {
+		t.Fatalf("kind = %q", ch.Kind)
+	}
+	if ch.CurrentForward != "" || ch.CurrentReverse != "" {
+		t.Fatalf("missing reverse must not stage a cardinality migration: %#v", ch)
+	}
+	if ch.ReverseType != "has_many" {
+		t.Fatalf("reverse = %q", ch.ReverseType)
+	}
+	if !strings.Contains(ch.Summary, "Repair missing backward") {
+		t.Fatalf("summary = %q", ch.Summary)
+	}
+}
+
+func TestComputeSchemaDiff_MissingOwnerBackward(t *testing.T) {
+	source := []SyncModel{{
+		Name: "user_profile",
+		Connections: []SyncConnection{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		},
+	}, {
+		Name: "users",
+		Connections: []SyncConnection{
+			{Model: "user_profile", Relation: "has_one", Type: "backward", KnownAs: "owner"},
+			{Model: "food_order", Relation: "has_many", Type: "backward", KnownAs: "owner"},
+		},
+	}}
+	dest := []SyncModel{{
+		Name: "user_profile",
+		Connections: []SyncConnection{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		},
+	}, {
+		Name: "users",
+		Connections: []SyncConnection{
+			{Model: "food_order", Relation: "has_many", Type: "backward", KnownAs: "owner"},
+		},
+	}}
+	changes := flattenSchemaChanges(computeSchemaDiff(source, dest))
+	if len(changes) != 1 {
+		t.Fatalf("changes = %#v, want the user_profile owner backward only", changes)
+	}
+	ch := changes[0]
+	if ch.Kind != ChangeUpdateConnection {
+		t.Fatalf("kind = %q", ch.Kind)
+	}
+	if ch.CurrentForward != "" || ch.CurrentReverse != "" {
+		t.Fatalf("repair must not carry migration endpoints: %#v", ch)
+	}
+	if ch.ReverseType != "has_one" {
+		t.Fatalf("reverse = %q, want has_one", ch.ReverseType)
+	}
+	for _, part := range []string{"users", "user_profile", "has_one", "owner"} {
+		if !strings.Contains(ch.Summary, part) {
+			t.Fatalf("summary = %q, missing %q", ch.Summary, part)
+		}
+	}
+
+	complete := []SyncModel{{
+		Name: "user_profile",
+		Connections: []SyncConnection{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		},
+	}, {
+		Name: "users",
+		Connections: []SyncConnection{
+			{Model: "user_profile", Relation: "has_one", Type: "backward", KnownAs: "owner"},
+			{Model: "food_order", Relation: "has_many", Type: "backward", KnownAs: "owner"},
+		},
+	}}
+	if again := flattenSchemaChanges(computeSchemaDiff(source, complete)); len(again) != 0 {
+		t.Fatalf("complete pair must stay in sync, got %#v", again)
 	}
 }
 

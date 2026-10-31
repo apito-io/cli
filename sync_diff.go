@@ -423,6 +423,24 @@ func computeSchemaDiff(sourceModels, destModels []SyncModel) []ModelSchemaDiff {
 					})
 					continue
 				}
+				// A matching forward half is not a complete pair. Connect fails
+				// when the peer row is missing, so report that gap as a repair.
+				// Leave CurrentForward/CurrentReverse empty: this is not a
+				// cardinality migration, and UpsertConnection appends the peer.
+				if hasTargetReverse && !hasCurrentReverse {
+					changes = append(changes, SchemaChange{
+						ID:          fmt.Sprintf("conn-fix:%s:%s", src.Name, key),
+						Kind:        ChangeUpdateConnection,
+						Model:       src.Name,
+						Connection:  &connCopy,
+						ReverseType: targetReverse,
+						Summary: fmt.Sprintf(
+							"Repair missing backward relation %q ← %q (%s, known_as: %q)",
+							c.Model, src.Name, targetReverse, knownAs,
+						),
+					})
+					continue
+				}
 				destRel := destConn.Relation
 				if destRel == "" {
 					destRel = "has_many"

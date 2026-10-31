@@ -102,6 +102,9 @@ func formatSchemaChangeDetail(ch SchemaChange) string {
 		}
 		return fmt.Sprintf("Add relation %q → %q (%s ↔ %s, known_as: %q) on %q", ch.Model, c.Model, forward, reverse, knownAs, ch.Model)
 	case ChangeUpdateConnection:
+		if ch.Summary != "" {
+			return ch.Summary
+		}
 		if ch.Connection == nil {
 			return ch.Summary
 		}
@@ -210,7 +213,14 @@ func formatSchemaChangeShort(ch SchemaChange) string {
 		if knownAs == "" {
 			knownAs = c.Model
 		}
-		return fmt.Sprintf("%s — fix relation direction → %s (known_as: %s)", ch.Model, c.Model, knownAs)
+		switch {
+		case strings.Contains(ch.Summary, "Repair missing backward"):
+			return fmt.Sprintf("%s — repair missing backward → %s (known_as: %s)", ch.Model, c.Model, knownAs)
+		case strings.Contains(ch.Summary, "Migrate relation"):
+			return fmt.Sprintf("%s — migrate relation → %s (known_as: %s)", ch.Model, c.Model, knownAs)
+		default:
+			return fmt.Sprintf("%s — fix relation direction → %s (known_as: %s)", ch.Model, c.Model, knownAs)
+		}
 	default:
 		return ch.Summary
 	}

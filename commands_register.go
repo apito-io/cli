@@ -21,7 +21,7 @@ func init() {
 	keyCmd.AddCommand(keyProjectCmd)
 	rootCmd.AddCommand(keyCmd)
 
-	mcpCmd.AddCommand(mcpConnectCmd, mcpUpdateCmd, mcpConfigCmd, mcpServeCmd)
+	mcpCmd.AddCommand(mcpConnectCmd, mcpConfigCmd, mcpServeCmd)
 	rootCmd.AddCommand(mcpCmd)
 
 	rootCmd.AddCommand(genCmd, typesCmd)

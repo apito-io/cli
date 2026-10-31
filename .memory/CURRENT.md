@@ -1,5 +1,14 @@
 # CLI — Current
 
+## Now (2026-10-29) — CLI v0.5.7
+
+Commit `c87c3f9` on `main`, tag **v0.5.7**, pushed. GitHub release succeeded.
+`apito mcp serve` only bridges stdio to the engine HTTP endpoint. It does
+not start `apito-mcp`. `studio.nginx.conf` forwards `$http_host` and
+`X-Forwarded-Port`. The next `apito start` from this binary writes that
+config. Studio image `v0.1.14` already contains the same nginx change. Ask
+before `./command.sh save`.
+
 ## Now (2026-10-27) — CLI v0.5.2
 
 Commit `40d170a` on `main`, local tag **v0.5.2**, not pushed. `apito start` checks GHCR, asks before replacing a pin, mounts nginx so the engine keeps port 5055, and asks before taking a busy 4055 or 5055. Live test with `/tmp/apito-v052` restarted `ghcr.io/apito-io/studio:v0.1.8` because that tag is the newest published Studio image. Console and engine returned 200. `/admin` returned 404, which the ready check accepts. `studio_version` stayed `v0.1.8`. Telemetry prompt was declined. Ask before push or `./command.sh save`.

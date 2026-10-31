@@ -12,8 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var installMCPRuntime = defaultInstallMCPRuntime
-
 var mcpConnectCmd = &cobra.Command{
 	Use:   "connect [account-name]",
 	Short: "Approve MCP access and print the client config",
@@ -21,8 +19,7 @@ var mcpConnectCmd = &cobra.Command{
 
 Local, Cloud, and Custom use the same list. A saved account is listed too.
 The choice builds the MCP URL. The command then prints one JSON config.
-Cursor, Claude, OpenAI, and VS Code use that same JSON. The old apito-mcp
-package is deprecated and is not downloaded.`,
+Cursor, Claude, OpenAI, and VS Code use that same JSON. There is no separate MCP server.`,
 	RunE: runMCPConnect,
 }
 
@@ -378,8 +375,4 @@ func printMCPClientConfig(server, kind string) error {
 	}
 	fmt.Print(string(body))
 	return nil
-}
-
-func defaultInstallMCPRuntime(update bool) error {
-	return ensureMCPRuntime(update)
 }

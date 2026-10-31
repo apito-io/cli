@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -12,19 +11,17 @@ import (
 )
 
 var (
-	mcpClient    string
-	mcpStdout    bool
-	mcpOut       string
-	mcpRawToken  bool
-	mcpTransport string
-	mcpLookPath  = exec.LookPath
-	mcpCommand   = defaultMCPCommand
-	mcpRun       = defaultMCPRun
+	mcpClient      string
+	mcpStdout      bool
+	mcpOut         string
+	mcpRawToken    bool
+	mcpTransport   string
+	mcpServeBridge = runMCPStdioBridge
 )
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Configure and serve the Apito MCP server",
+	Short: "Connect to the engine MCP endpoint",
 }
 
 var mcpConfigCmd = &cobra.Command{
@@ -59,14 +56,6 @@ var mcpConfigCmd = &cobra.Command{
 	},
 }
 
-var mcpUpdateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "There is no separate MCP runtime to download",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("apito mcp does not install a separate server. The engine serves MCP over HTTP")
-	},
-}
-
 var mcpServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Bridge stdio to the engine MCP endpoint",
@@ -81,30 +70,12 @@ var mcpServeCmd = &cobra.Command{
 		if strings.TrimSpace(ctx.ProjectID) == "" {
 			return fmt.Errorf("a project is required. Pass --project")
 		}
-		if mcpRuntime() != "http" {
-			return fmt.Errorf("apito mcp serve does not start a separate MCP server. The engine serves MCP over HTTP")
-		}
 		target, err := resolveMCPHTTPTarget(ctx.Account)
 		if err != nil {
 			return err
 		}
-		return runMCPStdioBridge(target, ctx.Account.MCPAccessToken, os.Stdin, os.Stdout, nil)
+		return mcpServeBridge(target, ctx.Account.MCPAccessToken, os.Stdin, os.Stdout, nil)
 	},
-}
-
-func mcpRuntime() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("APITO_MCP_RUNTIME"))) {
-	case "node":
-		return "node"
-	case "http":
-		return "http"
-	}
-	switch strings.ToLower(strings.TrimSpace(mcpTransport)) {
-	case "stdio", "node":
-		return "node"
-	default:
-		return "http"
-	}
 }
 
 func resolveMCPConfigAccount(account string) (string, error) {
@@ -149,50 +120,24 @@ func buildMCPConfig(account, project string, includeRaw bool) ([]byte, error) {
 			}
 		}
 	}
-	if mcpRuntime() == "http" {
-		if includeRaw {
-			return nil, fmt.Errorf("HTTP MCP config does not embed tokens")
-		}
-		target := mcpHTTPTarget{PublicURL: "https://api.apito.io/mcp"}
-		if hasAccount {
-			resolved, err := resolveMCPHTTPTarget(loaded)
-			if err != nil {
-				return nil, err
-			}
-			target = resolved
-		}
-		key := account
-		if key == "default" {
-			key = "apito"
-		}
-		doc := map[string]interface{}{
-			"mcpServers": map[string]interface{}{
-				key: map[string]interface{}{"type": "http", "url": target.PublicURL},
-			},
-		}
-		raw, err := json.MarshalIndent(doc, "", "  ")
+	if includeRaw {
+		return nil, fmt.Errorf("HTTP MCP config does not embed tokens")
+	}
+	target := mcpHTTPTarget{PublicURL: "https://api.apito.io/mcp"}
+	if hasAccount {
+		resolved, err := resolveMCPHTTPTarget(loaded)
 		if err != nil {
 			return nil, err
 		}
-		return append(raw, '\n'), nil
+		target = resolved
 	}
-	args := []string{"mcp", "serve", "--account", account}
-	if strings.TrimSpace(project) != "" {
-		args = append(args, "--project", project)
-	}
-	server := map[string]interface{}{
-		"command": "apito",
-		"args":    args,
-	}
-	if includeRaw {
-		if !hasAccount || strings.TrimSpace(loaded.MCPAccessToken) == "" {
-			return nil, fmt.Errorf("account %s has no MCP access token. Run apito mcp connect", account)
-		}
-		server["env"] = map[string]string{"APITO_AUTH_TOKEN": loaded.MCPAccessToken}
+	key := account
+	if key == "default" {
+		key = "apito"
 	}
 	doc := map[string]interface{}{
 		"mcpServers": map[string]interface{}{
-			"apito": server,
+			key: map[string]interface{}{"type": "http", "url": target.PublicURL},
 		},
 	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
@@ -200,42 +145,6 @@ func buildMCPConfig(account, project string, includeRaw bool) ([]byte, error) {
 		return nil, err
 	}
 	return append(raw, '\n'), nil
-}
-
-func defaultMCPCommand() (string, []string, error) {
-	if raw := strings.TrimSpace(os.Getenv("APITO_MCP_COMMAND")); raw != "" {
-		parts := strings.Fields(raw)
-		if len(parts) == 0 {
-			return "", nil, fmt.Errorf("APITO_MCP_COMMAND is empty")
-		}
-		return parts[0], parts[1:], nil
-	}
-	if _, err := mcpLookPath("node"); err != nil {
-		return "", nil, fmt.Errorf("Node.js is required for apito mcp serve. Install Node.js, or set APITO_MCP_COMMAND")
-	}
-	if dir := strings.TrimSpace(os.Getenv("APITO_MCP_DIR")); dir != "" {
-		if _, err := mcpLookPath("npx"); err != nil {
-			return "", nil, fmt.Errorf("npx is required to run APITO_MCP_DIR. Install Node.js, or set APITO_MCP_COMMAND")
-		}
-		return "npx", []string{"tsx", filepath.Join(dir, "src", "index.ts")}, nil
-	}
-	server, err := installedMCPServer()
-	if err != nil {
-		return "", nil, err
-	}
-	if server == "" {
-		if err := ensureMCPRuntime(false); err != nil {
-			return "", nil, err
-		}
-		server, err = installedMCPServer()
-		if err != nil {
-			return "", nil, err
-		}
-	}
-	if server == "" {
-		return "", nil, fmt.Errorf("MCP runtime is not installed. Run apito mcp connect or apito mcp update")
-	}
-	return "node", []string{server}, nil
 }
 
 func resolveMCPServeContext() (commandContext, error) {
@@ -360,15 +269,6 @@ func tenantInGrant(grants map[string][]string, want string) bool {
 	return false
 }
 
-func defaultMCPRun(bin string, args []string, env []string) error {
-	cmd := exec.Command(bin, args...)
-	cmd.Env = env
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 func initMCPFlags() {
 	mcpConnectCmd.Flags().StringVar(&loginKind, "kind", "", "local, cloud, or custom")
 	mcpConnectCmd.Flags().StringVar(&loginServer, "server", "", "Server URL for --kind custom")
@@ -378,6 +278,6 @@ func initMCPFlags() {
 	mcpConfigCmd.Flags().StringVar(&mcpOut, "out", "", "Also write the config to this file (mode 0600)")
 	mcpConfigCmd.Flags().BoolVar(&mcpRawToken, "raw-token", false, "Embed the access token. Requires --yes")
 	mcpConfigCmd.Flags().BoolVar(&flagYes, "yes", false, "Confirm a raw-token config")
-	mcpConfigCmd.Flags().StringVar(&mcpTransport, "transport", "", "stdio or http. http prints a token-free URL")
-	mcpServeCmd.Flags().StringVar(&mcpTransport, "transport", "", "stdio or http. http bridges stdio to the account MCP URL")
+	mcpConfigCmd.Flags().StringVar(&mcpTransport, "transport", "", "Ignored. Config is always the engine HTTP URL")
+	mcpServeCmd.Flags().StringVar(&mcpTransport, "transport", "", "Ignored. Serve always bridges stdio to the engine HTTP endpoint")
 }
