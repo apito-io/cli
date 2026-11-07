@@ -1,5 +1,13 @@
 # CLI — Current
 
+## Now (2026-11-06) — unsigned upload warning
+
+A refused multipart upload prints that hosted Apito keeps `PLUGIN_ALLOW_LOCAL_UPLOAD` off. The CLI does not turn the flag on. Local `./cli` was rebuilt. The warning and the deploy confirmation fix are uncommitted and untagged. Ask before `./command.sh save`.
+
+## Now (2026-11-01) — plugin project enable
+
+`apito plugin activate`, `deactivate`, and `upsert` call `upsertPlugin` for `--project`. `plugin update` posts `/system/plugin/:id/update`. `go run . plugin activate hc-eps-payment-plugin --account local --project suchok_wb8ed` succeeded. Catalog update of that id returned `PLUGIN_NOT_FOUND`. Rebuild `./cli` before using the installed binary. Uncommitted. Ask before `./command.sh save`.
+
 ## Now (2026-10-29) — CLI v0.5.7
 
 Commit `c87c3f9` on `main`, tag **v0.5.7**, pushed. GitHub release succeeded.

@@ -1,5 +1,17 @@
 # cli — AI Changelog
 
+## 2026-11-06 — Unsigned upload warning
+
+- **Changed:** A `LOCAL_UPLOAD_DISABLED` response warns that hosted Apito refuses unsigned system-plugin upload. The feature note says the CLI must not enable the flag.
+- **Why:** A customer on Apito Cloud must not be told to turn the server flag on.
+- **Affected:** `plugin_ops.go`, `.knowledge/features/plugin-lifecycle.md`. Uncommitted. Ask before `./command.sh save`.
+
+## 2026-11-01 — plugin activate, deactivate, upsert, update
+
+- **Changed:** Project `upsertPlugin` commands and a catalog update command.
+- **Why:** Project plugin enable was done with a one-off request. The CLI had no activate or deactivate.
+- **Affected:** `plugin_project.go`, `plugin-lifecycle.md`. Local `suchok_wb8ed` left activated. Ask before `./command.sh save`.
+
 ## 2026-10-29 — CLI v0.5.7
 
 - **Changed:** `apito mcp serve` bridges to the engine HTTP MCP endpoint.

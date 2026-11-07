@@ -1,5 +1,17 @@
 # CLI — Handoff
 
+## Unsigned upload warning (2026-11-06)
+
+- **Done:** Refusal text says hosted Apito keeps upload off. `plugin-lifecycle.md` says the CLI must not flip the flag. Local binary rebuilt.
+- **Not done:** Commit and tag. The deploy confirmation and secret-redaction edits are still uncommitted.
+- **Do not:** Set `PLUGIN_ALLOW_LOCAL_UPLOAD` from the CLI. `./command.sh save` until asked.
+
+## Plugin project enable (2026-11-01)
+
+- **Done:** `upsert`, `activate`, `deactivate`, `update`. Activate and deactivate verified on `suchok_wb8ed`. Left activated. Feature doc `plugin-lifecycle.md` updated.
+- **Not done:** Catalog update cannot see the local EPS plugin. Installed `./cli` is stale until `go build -o cli .`.
+- **Do not:** Send plugin env from these commands. Turn on `PLUGIN_ALLOW_LOCAL_UPLOAD`. `./command.sh save` until asked.
+
 ## CLI v0.5.7 (2026-10-29)
 
 - **Done:** Commit `c87c3f9`. Tag **v0.5.7** pushed. Release workflow
