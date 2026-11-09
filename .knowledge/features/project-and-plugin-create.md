@@ -11,18 +11,18 @@ timestamp: 2026-10-12T00:00:00Z
 
 ## Purpose
 
-`apito create` creates a project on a connected account through `POST /system/project/create`. Plugin scaffolds stay on `apito plugin create`.
+`apito create` creates a project on a connected account through `POST /system/project/create`. Plugin scaffolds stay on `apito plugin init`.
 
 ## Flows
 
 - **Account**: one configured account is announced and used. Several accounts use the same picker as `apito sync`. Zero accounts asks to connect an account, then creates the project on that account.
 - **Project**: prompts for name, description, and general or SaaS, then sends a SQLite `db_config` to the system API. Local Studio and cloud accounts both work.
-- **Plugin**: `apito plugin create` scaffolds a plugin. `apito create` does not.
+- **Plugin**: `apito plugin init` scaffolds a plugin. `apito create` does not.
 
 ## Main files
 
 - `create.go`
-- `plugin_deploy.go` (`createPluginScaffold`)
+- `plugin_dev.go` (`runPluginInit`)
 - `sync.go` (`resolveSyncAccount`)
 
 ## Dependencies
@@ -42,7 +42,7 @@ timestamp: 2026-10-12T00:00:00Z
 
 ## Tests
 
-- `apito create --help` describes account selection and points plugin scaffolds at `apito plugin create`.
+- `apito create --help` describes account selection and points plugin scaffolds at `apito plugin init`.
 
 ## Related
 

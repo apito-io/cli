@@ -1,47 +1,42 @@
 ---
 type: feature
 title: Plugin Lifecycle
-description: Account-scoped plugin path, signed catalog install, and from/to deploy
-resource: plugin_ops.go
+description: Local plugin scaffold, check, build, and git-tag publish
+resource: plugin_dev.go
 tags: [cli, plugins, deploy, build]
-timestamp: 2026-10-31T00:00:00Z
+timestamp: 2026-11-09T00:00:00Z
 ---
 
 # Plugin Lifecycle
 
 ## Purpose
 
-Every `apito plugin` command resolves an account first. That account chooses the plugin directory. A local account uses `~/.apito/plugins` unless `--dir` is set. A cloud account uses `~/.apito/plugins/<account>`.
+`apito plugin` scaffolds, checks, builds, and publishes a plugin repository on this machine. It does not connect to an account or an engine. Install, activate, and catalog update stay in the console.
 
 ## Flows
 
-- **Status**: `apito plugin` and `apito plugin status [id]` print one table. LOCAL is the account directory and its `config.yml` version. REMOTE, INSTALLED, and ACTIVATED come from `GET /system/plugin` on that account. A directory with no engine copy is `local yes`, `remote no`, `installed no`, `activated no`.
-- **Create**: `apito plugin create [name]` clones the Go hello-world plugin into `<path>/hc-<name>`.
-- **Build**: `apito plugin build [name]` runs `go vet ./...`, then the Go build. Server binaries stay linux/amd64 when that platform is selected.
-- **Add**: `apito plugin add <id-or-github-url>` posts `{id}` to `POST /system/plugin/install`. A GitHub URL contributes only the repository name. The engine downloads the signed release. The CLI does not fetch the zip. A local account then copies the installed bundle into its plugin path.
-- **Remove**: `apito plugin remove <id>` calls `DELETE /system/plugin/:id`.
-- **Deploy**: `apito plugin deploy [id] --from <account> --to <account>`. Catalog ids install with the signed registry. An unpublished plugin uploads only when the destination has `PLUGIN_ALLOW_LOCAL_UPLOAD`. Cloud to local uses `GET /system/plugin/:id/archive`. Secret env values are blank unless `--include-secrets`.
-- **Project enable**: `apito plugin upsert|activate|deactivate <id> --project <project-id>` calls `upsertPlugin` on `/system/graphql`. Activate sets `enable: true`. Deactivate sets `enable: false` and leaves the engine install in place. The command does not send env values.
-- **Catalog update**: `apito plugin update <id>` calls `POST /system/plugin/:id/update`. The engine installs the approved signed release. This does not flip a project's enable flag.
+- **List**: `apito plugin` and `apito plugin list` scan the current directory and `~/.apito/plugins` for `config.yml`, including plugins grouped one folder deeper. On a terminal the list is searchable by name and version. Selecting one offers check, build, or push. Push then asks for the commit message and patch, minor, or major. Without a terminal it prints name, version, and path. `--dir <path>` searches that directory instead.
+- **Init**: `apito plugin init [name]` asks for `system` or `payment`, then clones that boilerplate. A name without `hc-` is prefixed. A path argument writes there. With no path it writes `./<name>`. `--dir <path>` selects the parent. System clones `apito-hello-world-go-plugin` (query, mutation, protected REST, project env, settings UI). Payment clones `apito-payment-plugin-template` (initialize, verify, and a cancel that returns `not supported`). Identity is rewritten and `.git` is removed.
+- **Build**: `apito plugin build [dir]` runs `go vet` and `go build` in the plugin directory.
+- **Check**: `apito plugin check [dir]` fails unless `config.yml` has `id`, `language: go`, `version`, `binary_path`, a github.com `repository_url`, the handshake cookie, and an `api` or `payment` contribution. `main.go` `sdk.Init` must match the id and version. `go.mod` and `.github/workflows/build-release.yml` are required. The workflow must trigger on tags `v*`, run `go test`, and check the tag against `config.yml` and `sdk.Init`. `ui/` and the entry file are required when `ui_config.entry_path` is set. `origin` must be a github.com remote.
+- **Push**: `apito plugin push [dir]` is also `deploy`. It runs check, bumps the patch (`--minor` or `--major` otherwise), writes the version into `config.yml` and `sdk.Init`, and requires `-m`. Then it commits every change in the plugin directory, tags `v<version>`, and pushes the branch and the tag. The CLI does not upload a binary or sign the catalog.
 
 ## Main files
 
-- `plugin_account.go` — account and path
-- `plugin_ops.go` — list, build path, add, remove, deploy
-- `plugin_add.go` — catalog install request
+- `plugin_dev.go` — init, list, check, push
 - `plugin_build.go` — `go vet` and build
+- `plugin_account.go` — identity rewrite
 
 ## Dependencies
 
-- Engine plugin registry and `GET /system/plugin/:id/archive`
-- Access-token preset `cli_plugin` (`plugins.read`, `plugins.deploy`)
+- Public boilerplates `apito-io/apito-hello-world-go-plugin` and `apito-io/apito-payment-plugin-template`
+- The plugin repository's GitHub release workflow, which builds the zip and dispatches catalog sync
 
 ## Invariants
 
-- Do not download GitHub release assets in the CLI. The engine verifies the catalog signature and checksum.
-- `cli_login` stays `projects.read` and `schema.read`. Plugin install asks for the `cli_plugin` preset.
-- Install still needs a super-admin issuer plus `plugins.deploy`.
-- Do not turn on `PLUGIN_ALLOW_LOCAL_UPLOAD` from the CLI. When an unsigned upload is refused, warn that hosted Apito keeps it off. Only the operator of a self-hosted or enterprise engine sets it true.
+- Do not resolve an account for plugin commands. `apito create` still creates a project on a connected account.
+- Do not POST a plugin binary. Publishing is a git tag. The catalog sync stays the GitHub workflow.
+- A provider that cannot end a subscription returns `not supported` from its cancel operation.
 
 ## Related
 

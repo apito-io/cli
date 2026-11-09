@@ -1,5 +1,9 @@
 # CLI — Current
 
+## Now (2026-11-09) — plugin push version first
+
+Interactive `apito plugin` → push shows `Version` with the next patch filled in (`0.1.0` → `0.1.1`). Enter keeps it. A newer `major.minor.patch` replaces it. The commit message is next. That version is written to `config.yml` and `sdk.Init`, then committed, tagged, and pushed. `plugin push -m` still bumps by patch, `--minor`, or `--major`. Local `./cli` needs `go build -o cli .`. Uncommitted. Ask before `./command.sh save`.
+
 ## Now (2026-11-06) — unsigned upload warning
 
 A refused multipart upload prints that hosted Apito keeps `PLUGIN_ALLOW_LOCAL_UPLOAD` off. The CLI does not turn the flag on. Local `./cli` was rebuilt. The warning and the deploy confirmation fix are uncommitted and untagged. Ask before `./command.sh save`.
@@ -90,4 +94,4 @@ This must preserve `apito mcp connect`, `mcp serve`, and stdio configs while reu
 - `handover.go` is local only and is not in the tag.
 
 ## Last Updated
-2026-10-11
+2026-11-09

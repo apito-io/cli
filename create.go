@@ -23,7 +23,7 @@ One configured account is used automatically. Several accounts open the same
 picker as apito sync. When no account is connected, the command asks you to
 connect one and then creates the project through the system API.
 
-Plugin scaffolds stay on apito plugin create.`,
+Plugin scaffolds stay on apito plugin init.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return createProject()
 	},

@@ -1,5 +1,11 @@
 # CLI — Handoff
 
+## Plugin push version first (2026-11-09)
+
+- **Done:** Version prompt before the commit message. Exact version is released. Same or older versions are rejected. Existing plugin edits are committed with that message.
+- **Not done:** Commit. The binary in `apito/cli/cli` is the previous build until `go build -o cli .`.
+- **Do not:** `./command.sh save` until asked.
+
 ## Unsigned upload warning (2026-11-06)
 
 - **Done:** Refusal text says hosted Apito keeps upload off. `plugin-lifecycle.md` says the CLI must not flip the flag. Local binary rebuilt.
@@ -110,4 +116,4 @@ HTTP config and the stdio bridge are in `mcp_http.go`. They do not replace `mcp 
 - Filesystem→schema sync is in `084d722`. This release does not include the local `handover.go` draft.
 
 ## Last Updated
-2026-10-12
+2026-11-09

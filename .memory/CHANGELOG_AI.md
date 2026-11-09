@@ -1,5 +1,11 @@
 # cli — AI Changelog
 
+## 2026-11-09 — plugin push asks for the version first
+
+- **Changed:** The interactive push fills the next patch, lets you edit it, then asks for the commit message. The flag command still bumps by kind. A dirty plugin directory is included in that commit.
+- **Why:** The menu asked for a commit message before showing the version that would be tagged.
+- **Affected:** `plugin_dev.go`, `plugin_dev_test.go`. Uncommitted. Ask before `./command.sh save`.
+
 ## 2026-11-06 — Unsigned upload warning
 
 - **Changed:** A `LOCAL_UPLOAD_DISABLED` response warns that hosted Apito refuses unsigned system-plugin upload. The feature note says the CLI must not enable the flag.

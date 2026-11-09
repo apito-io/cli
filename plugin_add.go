@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -19,19 +20,11 @@ var pluginAddCmd = &cobra.Command{
 	Long:  `Resolves a plugin id and calls Engine POST /system/plugin/install. Engine verifies catalog signature, checksum, and config.yml. Super-admin / plugins.deploy required.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		accountName, _ := cmd.Flags().GetString("account")
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return
-			}
+		if err := runPluginAdd(cmd, args[0]); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
 		}
-		addPlugin(args[0], accountName)
 	},
-}
-
-func init() {
-	pluginAddCmd.Flags().StringP("account", "a", "", "Account to use for installation")
 }
 
 var githubURLPattern = regexp.MustCompile(`(?i)^https?://(?:www\.)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$`)
@@ -44,38 +37,26 @@ func parseGitHubOwnerRepo(url string) (owner, repo string, ok bool) {
 	return "", "", false
 }
 
-func addPlugin(pluginNameOrURL, accountName string) {
-	print_step("🔌 Add Plugin")
-	if !checkServerConfig(accountName) {
-		return
-	}
-	account, err := getAccountConfig(accountName)
-	if err != nil {
-		print_error("Failed to get account configuration: " + err.Error())
-		return
-	}
-
+func installCatalogPlugin(account AccountConfig, pluginNameOrURL string) (string, error) {
 	pluginID := pluginNameOrURL
 	if _, repo, ok := parseGitHubOwnerRepo(pluginNameOrURL); ok {
 		pluginID = repo
 	}
-
+	if err := requireHCPluginID(pluginID); err != nil {
+		return pluginID, err
+	}
 	body, _ := json.Marshal(map[string]string{"id": pluginID})
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(account.ServerURL, "/")+"/system/plugin/install", bytes.NewReader(body))
 	if err != nil {
-		print_error(err.Error())
-		return
+		return pluginID, err
 	}
 	req.Header.Set("Authorization", "Bearer "+account.Token())
 	req.Header.Set("X-Use-Cookies", "false")
 	req.Header.Set("Content-Type", "application/json")
-
-	print_status(fmt.Sprintf("Installing %s via Engine %s", pluginID, account.ServerURL))
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		print_error("Failed to connect to server: " + err.Error())
-		return
+		return pluginID, fmt.Errorf("failed to connect to server: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -91,11 +72,13 @@ func addPlugin(pluginNameOrURL, accountName string) {
 		if msg == "" {
 			msg = string(raw)
 		}
-		print_error(fmt.Sprintf("Install failed (%s): %s", parsed.Code, msg))
 		if parsed.Error != "" {
-			print_error(parsed.Error)
+			msg = msg + ": " + parsed.Error
 		}
-		return
+		return pluginID, fmt.Errorf("install failed (%s): %s", parsed.Code, msg)
 	}
-	print_success(parsed.Message)
+	if parsed.Message != "" {
+		print_success(parsed.Message)
+	}
+	return pluginID, nil
 }

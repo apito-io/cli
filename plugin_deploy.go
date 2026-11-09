@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"debug/elf"
 	"debug/macho"
@@ -10,25 +9,57 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // Plugin deployment commands
 
 var pluginCmd = &cobra.Command{
 	Use:   "plugin",
-	Short: "Manage plugins (create, deploy, update, list, status)",
-	Long:  `Plugin management commands for creating, deploying, updating, and monitoring HashiCorp plugins`,
+	Short: "Create, check, build, and publish a plugin",
+	Long: `Plugin commands work on a local repository. They do not connect to an account or an engine.
+
+apito plugin                searchable list of name and version, then check, build, or push
+apito plugin init [name]    clone a system or payment boilerplate
+apito plugin list           same as apito plugin
+apito plugin build [dir]    go vet and build
+apito plugin check [dir]    required files and the GitHub release workflow
+apito plugin push [dir]     bump the version, commit, tag, and push
+apito plugin deploy [dir]   same as push`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if err := ensureCLIConfig(); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
+		}
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := runPluginList(cmd); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
+		}
+	},
+}
+
+var pluginStatusCmd = &cobra.Command{
+	Use:   "status [plugin-id]",
+	Short: "Show local files and engine install state",
+	Long:  `Compares the account plugin directory with GET /system/plugin on that account. LOCAL is the directory. REMOTE is the engine copy and its version. INSTALLED is whether that engine has the plugin. ACTIVATED is the engine enable flag.`,
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		id := ""
+		if len(args) > 0 {
+			id = args[0]
+		}
+		if err := runPluginStatus(cmd, id); err != nil {
 			print_error(err.Error())
 			os.Exit(1)
 		}
@@ -36,179 +67,47 @@ var pluginCmd = &cobra.Command{
 }
 
 var pluginCreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a new plugin scaffold",
-	Long:  `Create a new plugin scaffold from templates`,
+	Use:   "create [name]",
+	Short: "Clone the Go hello-world system plugin into the account plugin path",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		createPluginScaffold()
+		name := ""
+		if len(args) > 0 {
+			name = args[0]
+		}
+		if err := runPluginCreate(cmd, name); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
+		}
 	},
 }
 
 var pluginDeployCmd = &cobra.Command{
-	Use:   "deploy [plugin-directory]",
-	Short: "Deploy a plugin to the Apito server",
-	Long:  `Build and deploy a plugin to the configured Apito server`,
+	Use:   "deploy [plugin-id]",
+	Short: "Copy a plugin from one account to another",
+	Long:  `Reads the source account path and writes the destination account path. A cloud destination installs the signed catalog release. An id that is not in the catalog is not uploaded.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check for --dir flag first, then positional argument, then default to current dir
-		pluginDir, _ := cmd.Flags().GetString("dir")
-		if pluginDir == "" && len(args) > 0 {
-			pluginDir = args[0]
+		id := ""
+		if len(args) > 0 {
+			id = args[0]
 		}
-		if pluginDir == "" {
-			pluginDir = "."
+		if err := runPluginDeploy(cmd, id); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
 		}
-
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		forceReplace, _ := cmd.Flags().GetBool("replace")
-		force, _ := cmd.Flags().GetBool("force")
-		forceReplace = forceReplace || force
-
-		deployPlugin(pluginDir, accountName, forceReplace)
 	},
 }
 
-var pluginUpdateCmd = &cobra.Command{
-	Use:   "update [plugin-directory]",
-	Short: "Update an existing plugin on the server",
-	Long:  `Build and update an existing plugin on the configured Apito server`,
-	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check for --dir flag first, then positional argument, then default to current dir
-		pluginDir, _ := cmd.Flags().GetString("dir")
-		if pluginDir == "" && len(args) > 0 {
-			pluginDir = args[0]
-		}
-		if pluginDir == "" {
-			pluginDir = "."
-		}
-
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		updatePlugin(pluginDir, accountName)
-	},
-}
-
-var pluginListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all plugins on the server",
-	Long:  `List all plugins and their status on the configured Apito server`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		listPlugins(accountName)
-	},
-}
-
-var pluginStatusCmd = &cobra.Command{
-	Use:   "status [plugin-id]",
-	Short: "Get status of a specific plugin",
-	Long:  `Get detailed status information for a specific plugin`,
+var pluginRemoveCmd = &cobra.Command{
+	Use:   "remove <plugin-id>",
+	Short: "Uninstall a plugin from the account",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
+		if err := runPluginRemove(cmd, args[0]); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
 		}
-
-		getPluginStatus(args[0], accountName)
-	},
-}
-
-var pluginRestartCmd = &cobra.Command{
-	Use:   "restart [plugin-id]",
-	Short: "Restart a specific plugin",
-	Long:  `Restart a specific plugin on the server`,
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		restartPlugin(args[0], accountName)
-	},
-}
-
-var pluginStopCmd = &cobra.Command{
-	Use:   "stop [plugin-id]",
-	Short: "Stop a specific plugin",
-	Long:  `Stop a specific plugin on the server`,
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		stopPlugin(args[0], accountName)
-	},
-}
-
-var pluginDeleteCmd = &cobra.Command{
-	Use:   "delete [plugin-id]",
-	Short: "Delete a specific plugin",
-	Long:  `Delete a specific plugin from the server`,
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Get account name from flag
-		accountName, _ := cmd.Flags().GetString("account")
-
-		// If no account specified, show interactive selection
-		if accountName == "" {
-			accountName = selectAccountInteractively()
-			if accountName == "" {
-				return // User cancelled
-			}
-		}
-
-		deletePlugin(args[0], accountName)
 	},
 }
 
@@ -238,8 +137,9 @@ type PluginConfig struct {
 			Value string `yaml:"value"`
 		} `yaml:"env_vars"`
 		UIConfig *struct {
-			Enable   bool   `yaml:"enable"`
-			DistPath string `yaml:"dist_path"`
+			Enable    bool   `yaml:"enable"`
+			DistPath  string `yaml:"dist_path"`
+			EntryPath string `yaml:"entry_path"`
 		} `yaml:"ui_config,omitempty"`
 	} `yaml:"plugin"`
 }
@@ -273,222 +173,62 @@ type PluginStatusInfo struct {
 }
 
 func init() {
-	// Add --dir flags to commands that accept plugin directories
-	pluginDeployCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
-	pluginUpdateCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
-
-	// Add --account flags to all plugin commands
-	pluginDeployCmd.Flags().StringP("account", "a", "", "Account to use for deployment")
-	pluginDeployCmd.Flags().Bool("replace", false, "Delete existing plugin before deployment (force replace)")
-	pluginDeployCmd.Flags().BoolP("force", "f", false, "Same as --replace: delete existing plugin before deployment")
-	pluginUpdateCmd.Flags().StringP("account", "a", "", "Account to use for update")
-	pluginListCmd.Flags().StringP("account", "a", "", "Account to use for listing")
-	pluginStatusCmd.Flags().StringP("account", "a", "", "Account to use for status check")
-	pluginRestartCmd.Flags().StringP("account", "a", "", "Account to use for restart")
-	pluginStopCmd.Flags().StringP("account", "a", "", "Account to use for stop")
-	pluginDeleteCmd.Flags().StringP("account", "a", "", "Account to use for deletion")
-
-	// Add plugin commands to plugin group
-	pluginCmd.AddCommand(pluginAddCmd)
-	pluginCmd.AddCommand(pluginCreateCmd)
-	pluginCmd.AddCommand(pluginDeployCmd)
-	pluginCmd.AddCommand(pluginUpdateCmd)
+	pluginCmd.PersistentFlags().StringP("dir", "d", "", "Directory to search, or the parent for init")
+	pluginInitCmd.Flags().String("type", "", "Boilerplate: system or payment")
+	pluginPushCmd.Flags().StringP("message", "m", "", "Commit message for the version bump")
+	pluginPushCmd.Flags().Bool("minor", false, "Bump the minor version instead of the patch")
+	pluginPushCmd.Flags().Bool("major", false, "Bump the major version instead of the patch")
+	pluginCmd.AddCommand(pluginInitCmd)
 	pluginCmd.AddCommand(pluginListCmd)
-	pluginCmd.AddCommand(pluginStatusCmd)
-	pluginCmd.AddCommand(pluginRestartCmd)
-	pluginCmd.AddCommand(pluginStopCmd)
-	pluginCmd.AddCommand(pluginDeleteCmd)
-	// Build commands are added in plugin_build.go
-	// pluginCmd is added to rootCmd in main.go
+	pluginCmd.AddCommand(pluginBuildCmd)
+	pluginCmd.AddCommand(pluginCheckCmd)
+	pluginCmd.AddCommand(pluginPushCmd)
 }
 
-func createPluginScaffold() {
-	print_step("🔌 Create Plugin Scaffold")
-
-	// Language selection
-	languages := []string{"Go (recommended)", "JavaScript", "Python"}
-	langPrompt := promptui.Select{
-		Label: "Select plugin language",
-		Items: languages,
-	}
-	langIdx, _, err := langPrompt.Run()
+func runPluginCreate(cmd *cobra.Command, name string) error {
+	accountName, root, err := pluginAccountAndRoot(cmd)
 	if err != nil {
-		print_error("Language selection cancelled")
-		return
+		return err
 	}
-
-	var repoURL string
-	switch langIdx {
-	case 0:
-		repoURL = "https://github.com/apito-io/apito-hello-world-go-plugin.git"
-	case 1:
-		repoURL = "https://github.com/apito-io/apito-hello-world-js-plugin.git"
-	case 2:
-		repoURL = "https://github.com/apito-io/apito-hello-world-python-plugin.git"
-	}
-
-	// Plugin name input
-	namePrompt := promptui.Prompt{
-		Label:    "Plugin name (will be prefixed with 'hc-')",
-		Validate: validatePluginName,
-	}
-	pluginName, err := namePrompt.Run()
-	if err != nil {
-		print_error("Plugin name input cancelled")
-		return
-	}
-
-	// Add hc- prefix if not present
-	if !strings.HasPrefix(pluginName, "hc-") {
-		pluginName = "hc-" + pluginName
-	}
-
-	print_status(fmt.Sprintf("Creating plugin scaffold: %s", pluginName))
-	print_status("Cloning template from: " + repoURL)
-
-	// Clone the template repository
-	if err := runGitClone(repoURL, pluginName); err != nil {
-		print_error("Failed to clone template: " + err.Error())
-		return
-	}
-
-	// Remove .git directory to start fresh
-	gitDir := filepath.Join(pluginName, ".git")
-	if err := os.RemoveAll(gitDir); err != nil {
-		print_warning("Failed to remove .git directory: " + err.Error())
-	}
-
-	print_success(fmt.Sprintf("Plugin scaffold created successfully: %s", pluginName))
-	print_status("Next steps:")
-	print_status("1. cd " + pluginName)
-	print_status("2. Customize your plugin code")
-	print_status("3. Test locally: make build")
-	print_status("4. Deploy: apito plugin deploy")
-}
-
-func deployPlugin(pluginDir, accountName string, forceReplace bool) {
-	if !checkServerConfig(accountName) {
-		return
-	}
-
-	// Load plugin configuration
-	config, err := readPluginConfig(pluginDir)
-	if err != nil {
-		print_error("Failed to load plugin configuration: " + err.Error())
-		return
-	}
-
-	pluginID := config.Plugin.ID
-
-	// Ask for confirmation before deployment
-	extraInfo := []string{
-		fmt.Sprintf("Version: %s", config.Plugin.Version),
-		fmt.Sprintf("Language: %s", config.Plugin.Language),
-		fmt.Sprintf("Type: %s", config.Plugin.Type),
-	}
-
-	if forceReplace {
-		extraInfo = append(extraInfo, "Replace Mode: enabled (existing deployment will be deleted first)")
-	}
-
-	if !confirmSensitiveOperation("deploy", pluginID, accountName, extraInfo...) {
-		return
-	}
-
-	if forceReplace {
-		if err := deleteExistingPluginBeforeDeploy(pluginID, accountName); err != nil {
-			print_error("Failed to delete existing plugin: " + err.Error())
-			return
+	if strings.TrimSpace(name) == "" {
+		namePrompt := promptui.Prompt{
+			Label:    "Plugin name (prefixed with hc-)",
+			Validate: validatePluginName,
+		}
+		name, err = namePrompt.Run()
+		if err != nil {
+			return fmt.Errorf("plugin name cancelled")
 		}
 	}
-
-	print_step("🚀 Deploying Plugin")
-	print_status(fmt.Sprintf("Deploying plugin: %s (version: %s)", pluginID, config.Plugin.Version))
-
-	// Note: Build plugin separately using 'apito plugin build' before deployment
-	print_status("Tip: Run 'apito plugin build' first to ensure your plugin is built")
-
-	// Create deployment package
-	packagePath, err := createDeploymentPackage(pluginDir, config)
-	if err != nil {
-		print_error("Failed to create deployment package: " + err.Error())
-		return
+	if err := validatePluginName(name); err != nil {
+		return err
 	}
-	defer os.Remove(packagePath) // Clean up
-
-	// Deploy to server (includes platform validation)
-	response, err := deployToServer(packagePath, config, false, pluginDir, accountName)
-	if err != nil {
-		print_error("Failed to deploy plugin: " + err.Error())
-		return
+	if !strings.HasPrefix(name, "hc-") {
+		name = "hc-" + name
 	}
-
-	if response.Success {
-		print_success(response.Message)
-		print_status(fmt.Sprintf("Plugin %s is now %s", pluginID, response.Status))
-	} else {
-		print_error("Deployment failed: " + response.Message)
-		if response.Error != "" {
-			print_error("Error details: " + response.Error)
-		}
-		if strings.Contains(strings.ToLower(response.Message+response.Error), "failed to load") {
-			print_warning("Tip: If the previous deployment is stuck, use '--replace' or '--force' to delete and redeploy.")
-		}
+	dest := filepath.Join(root, name)
+	if _, err := os.Stat(dest); err == nil {
+		return fmt.Errorf("plugin directory already exists: %s", dest)
 	}
-}
-
-func updatePlugin(pluginDir, accountName string) {
-	if !checkServerConfig(accountName) {
-		return
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
 	}
-
-	// Load plugin configuration
-	config, err := readPluginConfig(pluginDir)
-	if err != nil {
-		print_error("Failed to load plugin configuration: " + err.Error())
-		return
+	repoURL := "https://github.com/apito-io/apito-hello-world-go-plugin.git"
+	print_step("Create plugin")
+	print_status(fmt.Sprintf("Account: %s", accountName))
+	print_status("Cloning " + repoURL)
+	if err := runGitClone(repoURL, dest); err != nil {
+		return err
 	}
-
-	pluginID := config.Plugin.ID
-
-	// Ask for confirmation before update
-	if !confirmSensitiveOperation("update", pluginID, accountName,
-		fmt.Sprintf("Version: %s", config.Plugin.Version),
-		fmt.Sprintf("Language: %s", config.Plugin.Language),
-		fmt.Sprintf("Type: %s", config.Plugin.Type)) {
-		return
+	if err := os.RemoveAll(filepath.Join(dest, ".git")); err != nil {
+		print_warning("Failed to remove .git: " + err.Error())
 	}
-
-	print_step("🔄 Updating Plugin")
-	print_status(fmt.Sprintf("Updating plugin: %s (version: %s)", pluginID, config.Plugin.Version))
-
-	// Note: Build plugin separately using 'apito plugin build' before update
-	print_status("Tip: Run 'apito plugin build' first to ensure your plugin is built")
-
-	// Create deployment package
-	packagePath, err := createDeploymentPackage(pluginDir, config)
-	if err != nil {
-		print_error("Failed to create deployment package: " + err.Error())
-		return
+	if err := rewritePluginIdentity(dest, name); err != nil {
+		return err
 	}
-	defer os.Remove(packagePath)
-
-	// Deploy to server (update mode, includes platform validation)
-	response, err := deployToServer(packagePath, config, true, pluginDir, accountName)
-	if err != nil {
-		print_error("Failed to update plugin: " + err.Error())
-		return
-	}
-
-	if response.Success {
-		print_success(response.Message)
-		print_status(fmt.Sprintf("Plugin %s is now %s", pluginID, response.Status))
-	} else {
-		print_error("Update failed: " + response.Message)
-		if response.Error != "" {
-			print_error("Error details: " + response.Error)
-		}
-	}
+	print_success("Plugin scaffold created: " + dest)
+	print_status("Next: apito plugin build " + name)
+	return nil
 }
 
 func listPlugins(accountName string) {
@@ -834,48 +574,6 @@ func controlPlugin(pluginID, action, accountName string) {
 	}
 }
 
-func deleteExistingPluginBeforeDeploy(pluginID, accountName string) error {
-	print_status("🔁 Replace flag detected: deleting existing deployment before uploading new version...")
-
-	statusCode, body, err := performPluginDeleteRequest(pluginID, accountName)
-	if err != nil {
-		return err
-	}
-
-	if statusCode == http.StatusNotFound {
-		print_warning("No existing deployment found on server – continuing with deploy")
-		return nil
-	}
-
-	if statusCode != http.StatusOK {
-		message := extractAPIMessage(body)
-		if message == "" {
-			message = fmt.Sprintf("server returned status %d during delete", statusCode)
-		}
-		return fmt.Errorf("%s", message)
-	}
-
-	if len(body) == 0 {
-		return fmt.Errorf("empty response from server during delete")
-	}
-
-	var response PluginOperationResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return fmt.Errorf("failed to decode delete response: %w", err)
-	}
-
-	if !response.Success {
-		message := response.Message
-		if message == "" {
-			message = "delete request failed"
-		}
-		return fmt.Errorf("%s", message)
-	}
-
-	print_success("Existing deployment removed")
-	return nil
-}
-
 func performPluginDeleteRequest(pluginID, accountName string) (int, []byte, error) {
 	account, err := getAccountConfig(accountName)
 	if err != nil {
@@ -920,6 +618,9 @@ func extractAPIMessage(body []byte) string {
 			switch v := msg.(type) {
 			case string:
 				if v != "" {
+					if errMsg, ok := payload["error"].(string); ok && errMsg != "" && errMsg != v {
+						return v + ": " + errMsg
+					}
 					return v
 				}
 			default:
@@ -963,14 +664,54 @@ func validatePluginName(input string) error {
 }
 
 func runGitClone(repoURL, targetDir string) error {
-	// Implementation would use git clone command
-	// For now, return a placeholder
-	return fmt.Errorf("git clone not implemented - please clone manually: git clone %s %s", repoURL, targetDir)
+	cmd := exec.Command("git", "clone", "--depth", "1", repoURL, targetDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git clone %s: %w", repoURL, err)
+	}
+	return nil
 }
 
 // buildPlugin is now implemented in plugin_build.go
 
-func createDeploymentPackage(pluginDir string, config *PluginConfig) (string, error) {
+// pluginUIFile is the console bundle to ship next to the binary.
+// The engine reads entry_path (default ui.js) from the plugin directory.
+// A dist_path file is packed under that same name when ui.js is absent.
+func pluginUIFile(pluginDir string, config *PluginConfig) (string, string, bool, error) {
+	entry := "ui.js"
+	var dist string
+	if config != nil && config.Plugin.UIConfig != nil {
+		if name := filepath.Base(strings.TrimSpace(config.Plugin.UIConfig.EntryPath)); name != "" && name != "." {
+			entry = name
+		}
+		dist = strings.TrimSpace(config.Plugin.UIConfig.DistPath)
+	}
+	if entry == "" || strings.Contains(entry, "..") {
+		return "", "", false, fmt.Errorf("invalid ui entry path")
+	}
+	direct := filepath.Join(pluginDir, entry)
+	if st, err := os.Stat(direct); err == nil && !st.IsDir() {
+		return direct, entry, true, nil
+	}
+	if dist != "" && !strings.Contains(dist, "..") {
+		compiled := filepath.Join(pluginDir, dist)
+		if st, err := os.Stat(compiled); err == nil && !st.IsDir() {
+			return compiled, entry, true, nil
+		}
+	}
+	return "", entry, false, nil
+}
+
+func pluginUIConfigured(config *PluginConfig) bool {
+	if config == nil || config.Plugin.UIConfig == nil {
+		return false
+	}
+	ui := config.Plugin.UIConfig
+	return ui.Enable || strings.TrimSpace(ui.DistPath) != "" || strings.TrimSpace(ui.EntryPath) != ""
+}
+
+func createDeploymentPackage(pluginDir string, config *PluginConfig, includeSecrets bool) (string, error) {
 	// Validate required files exist before creating package
 	configPath := filepath.Join(pluginDir, "config.yml")
 	binaryPath := filepath.Join(pluginDir, config.Plugin.BinaryPath)
@@ -1000,8 +741,34 @@ func createDeploymentPackage(pluginDir string, config *PluginConfig) (string, er
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	// Add config.yml to tar
-	if err := addFileToTar(tw, configPath, "config.yml"); err != nil {
+	// Add config.yml to tar. Secret env values stay blank unless asked.
+	configSource := configPath
+	if !includeSecrets {
+		raw, err := os.ReadFile(configPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read config.yml: %w", err)
+		}
+		redacted, err := redactPluginConfigSecrets(raw)
+		if err != nil {
+			return "", fmt.Errorf("failed to blank secret env values: %w", err)
+		}
+		tmp, err := os.CreateTemp("", "apito-plugin-config-*.yml")
+		if err != nil {
+			return "", err
+		}
+		if _, err := tmp.Write(redacted); err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			return "", err
+		}
+		if err := tmp.Close(); err != nil {
+			os.Remove(tmp.Name())
+			return "", err
+		}
+		defer os.Remove(tmp.Name())
+		configSource = tmp.Name()
+	}
+	if err := addFileToTar(tw, configSource, "config.yml"); err != nil {
 		return "", fmt.Errorf("failed to add config.yml to deployment package: %w", err)
 	}
 
@@ -1011,31 +778,25 @@ func createDeploymentPackage(pluginDir string, config *PluginConfig) (string, er
 		return "", fmt.Errorf("failed to add binary %s to deployment package: %w", binaryName, err)
 	}
 
-	// Add UI files if UI is enabled
-	if config.Plugin.UIConfig != nil && config.Plugin.UIConfig.Enable && config.Plugin.UIConfig.DistPath != "" {
-		// Add the compiled UI file (dist/index.umd.js or whatever is in dist_path)
-		uiDistPath := filepath.Join(pluginDir, config.Plugin.UIConfig.DistPath)
-		if _, err := os.Stat(uiDistPath); err == nil {
-			// Preserve the directory structure: ui/dist/index.umd.js
-			tarPath := config.Plugin.UIConfig.DistPath
-			if err := addFileToTar(tw, uiDistPath, tarPath); err != nil {
-				return "", fmt.Errorf("failed to add UI dist file %s to deployment package: %w", tarPath, err)
-			}
-			print_status(fmt.Sprintf("✅ Added UI dist file: %s", tarPath))
-		} else {
-			print_warning(fmt.Sprintf("⚠️  UI dist file not found at %s, skipping UI deployment", uiDistPath))
+	uiSrc, uiName, uiFound, err := pluginUIFile(pluginDir, config)
+	if err != nil {
+		return "", err
+	}
+	if uiFound {
+		if err := addFileToTar(tw, uiSrc, uiName); err != nil {
+			return "", fmt.Errorf("failed to add UI file %s to deployment package: %w", uiName, err)
 		}
+		print_status(fmt.Sprintf("✅ Added UI file: %s", uiName))
+	} else if pluginUIConfigured(config) {
+		print_warning("⚠️  UI file not found, skipping UI deployment")
+	}
 
-		// Add config.json if it exists in ui/ directory
-		uiConfigJSONPath := filepath.Join(pluginDir, "ui", "config.json")
-		if _, err := os.Stat(uiConfigJSONPath); err == nil {
-			if err := addFileToTar(tw, uiConfigJSONPath, "ui/config.json"); err != nil {
-				return "", fmt.Errorf("failed to add UI config.json to deployment package: %w", err)
-			}
-			print_status("✅ Added UI config.json")
-		} else {
-			print_warning("⚠️  UI config.json not found, skipping")
+	uiConfigJSONPath := filepath.Join(pluginDir, "ui", "config.json")
+	if _, err := os.Stat(uiConfigJSONPath); err == nil {
+		if err := addFileToTar(tw, uiConfigJSONPath, "ui/config.json"); err != nil {
+			return "", fmt.Errorf("failed to add UI config.json to deployment package: %w", err)
 		}
+		print_status("✅ Added UI config.json")
 	}
 
 	return packagePath, nil
@@ -1188,206 +949,104 @@ func detectBinaryFormat(filePath string) BinaryInfo {
 }
 
 // getServerPlatformInfo queries the server for its platform information
-func getServerPlatformInfo(serverURL, cloudSyncKey string) (*ServerPlatformInfo, error) {
-	url := fmt.Sprintf("%s/system/plugin/platform", serverURL)
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
+// destinationRebuildReason reports why the local binary cannot run on the server.
+// An empty string means the binary already matches.
+func destinationRebuildReason(binary BinaryInfo, server ServerPlatformInfo) string {
+	if binary.Error != "" {
+		return ""
 	}
-
-	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
-	req.Header.Set("X-Use-Cookies", "false")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	if binary.OS != server.OS {
+		return fmt.Sprintf("plugin OS %s does not match server OS %s", binary.OS, server.OS)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)
+	if binary.Architecture != server.Architecture {
+		return fmt.Sprintf("plugin architecture %s does not match server architecture %s", binary.Architecture, server.Architecture)
 	}
-
-	var response ServerPlatformResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, err
-	}
-
-	if !response.Success {
-		return nil, fmt.Errorf("platform API error: %s", response.Message)
-	}
-
-	return &response.Platform, nil
+	return ""
 }
 
-// validatePlatformCompatibility checks if the plugin binary is compatible with the server
-func validatePlatformCompatibility(pluginDir string, config *PluginConfig, serverURL, cloudSyncKey string) error {
-	print_status("🔍 Checking platform compatibility...")
-
-	// Get server platform information
-	serverPlatform, err := getServerPlatformInfo(serverURL, cloudSyncKey)
-	if err != nil {
-		print_warning("⚠️  Could not get server platform info: " + err.Error())
-		print_warning("⚠️  Skipping platform validation - deploy at your own risk!")
-		return nil
+func describePluginProcess(info *PluginStatusInfo) string {
+	if info == nil {
+		return "not installed"
 	}
-
-	print_status(fmt.Sprintf("🖥️  Server Platform: %s/%s (%s)",
-		serverPlatform.OS, serverPlatform.Architecture, serverPlatform.Hostname))
-
-	// Detect plugin binary format
-	binaryPath := filepath.Join(pluginDir, config.Plugin.BinaryPath)
-	binaryInfo := detectBinaryFormat(binaryPath)
-
-	if binaryInfo.Error != "" {
-		return fmt.Errorf("❌ Failed to analyze plugin binary: %s", binaryInfo.Error)
+	version := strings.TrimSpace(info.Version)
+	if version == "" {
+		version = "unknown"
 	}
-
-	print_status(fmt.Sprintf("🔧 Plugin Binary: %s/%s (%s format)",
-		binaryInfo.OS, binaryInfo.Architecture, binaryInfo.Format))
-
-	// Check compatibility
-	if binaryInfo.OS != serverPlatform.OS {
-		return fmt.Errorf("❌ PLATFORM MISMATCH: Plugin OS (%s) doesn't match server OS (%s)\n"+
-			"💡 Build the plugin for %s or deploy to a %s server\n"+
-			"💡 Use 'apito plugin build' and select the correct target platform",
-			binaryInfo.OS, serverPlatform.OS, serverPlatform.OS, binaryInfo.OS)
+	status := strings.TrimSpace(info.Status)
+	if status == "" {
+		status = "unknown"
 	}
-
-	if binaryInfo.Architecture != serverPlatform.Architecture {
-		return fmt.Errorf("❌ ARCHITECTURE MISMATCH: Plugin architecture (%s) doesn't match server architecture (%s)\n"+
-			"💡 Build the plugin for %s/%s or deploy to a %s server\n"+
-			"💡 Use 'apito plugin build' and select the correct target platform",
-			binaryInfo.Architecture, serverPlatform.Architecture,
-			serverPlatform.OS, serverPlatform.Architecture, binaryInfo.Architecture)
+	updated := strings.TrimSpace(info.LastUpdated)
+	if updated == "" {
+		updated = "unknown"
 	}
-
-	print_success(fmt.Sprintf("✅ Platform compatibility verified: %s/%s",
-		serverPlatform.OS, serverPlatform.Architecture))
-
-	return nil
+	return fmt.Sprintf("%s version %s, process %s, files updated %s", info.ID, version, status, updated)
 }
 
-func deployToServer(packagePath string, config *PluginConfig, isUpdate bool, pluginDir, accountName string) (*PluginOperationResponse, error) {
-	account, err := getAccountConfig(accountName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get account configuration: %w", err)
+func pluginReplaceSentence(before, after *PluginStatusInfo) string {
+	beforeRunning := before != nil && before.Status == "loaded"
+	afterRunning := after != nil && after.Status == "loaded"
+	switch {
+	case beforeRunning && afterRunning:
+		return "Reloaded: the previous process was stopped and the uploaded binary is running."
+	case afterRunning:
+		return "Loaded: the plugin was not running before, and the uploaded binary is running now."
+	case beforeRunning:
+		return "Not running: the previous process was stopped and the uploaded binary did not stay up."
+	default:
+		return "Not running: the uploaded binary is not the active process."
 	}
+}
 
-	serverURL := account.ServerURL
-	cloudSyncKey := account.Token()
-
-	// Validate platform compatibility before deployment
-	if err := validatePlatformCompatibility(pluginDir, config, serverURL, cloudSyncKey); err != nil {
+func redactPluginConfigSecrets(raw []byte) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
+	redactPluginSecretNode(&doc)
+	return yaml.Marshal(&doc)
+}
 
-	// Create multipart form
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// Add plugin metadata
-	writer.WriteField("id", config.Plugin.ID)
-	writer.WriteField("language", config.Plugin.Language)
-	writer.WriteField("title", config.Plugin.Title)
-	writer.WriteField("description", config.Plugin.Description)
-	writer.WriteField("type", config.Plugin.Type)
-	writer.WriteField("version", config.Plugin.Version)
-	writer.WriteField("author", config.Plugin.Author)
-	writer.WriteField("repository_url", config.Plugin.RepositoryURL)
-	writer.WriteField("branch", config.Plugin.Branch)
-	writer.WriteField("binary_path", config.Plugin.BinaryPath)
-	writer.WriteField("exported_variable", config.Plugin.ExportedVariable)
-	writer.WriteField("enable", fmt.Sprintf("%v", config.Plugin.Enable))
-	writer.WriteField("debug", fmt.Sprintf("%v", config.Plugin.Debug))
-
-	// Add plugin package file
-	file, err := os.Open(packagePath)
-	if err != nil {
-		return nil, err
+func redactPluginSecretNode(node *yaml.Node) {
+	if node == nil {
+		return
 	}
-	defer file.Close()
-
-	part, err := writer.CreateFormFile("plugin_files", filepath.Base(packagePath))
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := io.Copy(part, file); err != nil {
-		return nil, err
-	}
-
-	writer.Close()
-
-	// Create HTTP request
-	var method, url string
-	if isUpdate {
-		method = "PUT"
-		url = fmt.Sprintf("%s/system/plugin/%s", serverURL, config.Plugin.ID)
-	} else {
-		method = "POST"
-		url = fmt.Sprintf("%s/system/plugin", serverURL)
-	}
-
-	req, err := http.NewRequest(method, url, &buf)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+cloudSyncKey)
-	req.Header.Set("X-Use-Cookies", "false")
-
-	// Send request
-	client := &http.Client{Timeout: 5 * time.Minute} // Longer timeout for uploads
-	resp, err := client.Do(req)
-	if err != nil {
-		// Check for connection refused or network errors
-		if strings.Contains(err.Error(), "connection refused") ||
-			strings.Contains(err.Error(), "connect: connection refused") ||
-			strings.Contains(err.Error(), "dial tcp") {
-			return nil, fmt.Errorf("❌ Apito Engine server is offline or unreachable at %s\n"+
-				"💡 Please ensure the Apito Engine server is running:\n"+
-				"   • Check if server is started: 'apito status'\n"+
-				"   • Start server if needed: 'apito start'\n"+
-				"   • Verify server URL in config: %s", serverURL, serverURL)
+	switch node.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, child := range node.Content {
+			redactPluginSecretNode(child)
 		}
-		return nil, fmt.Errorf("failed to deploy plugin: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read server response: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusForbidden {
-		print_warning("Server rejected deployment (403). Use '--replace' or '--force' to delete the existing plugin before redeploying.")
-		message := extractAPIMessage(body)
-		if message == "" {
-			message = "server returned 403 Forbidden"
+	case yaml.MappingNode:
+		var keyValue, secretValue *yaml.Node
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i]
+			val := node.Content[i+1]
+			if key.Kind == yaml.ScalarNode && pluginSecretEnvKey(key.Value) && val.Kind == yaml.ScalarNode {
+				val.Value = ""
+				val.Tag = "!!str"
+			}
+			if key.Kind == yaml.ScalarNode && key.Value == "key" && val.Kind == yaml.ScalarNode {
+				keyValue = val
+			}
+			if key.Kind == yaml.ScalarNode && key.Value == "value" && val.Kind == yaml.ScalarNode {
+				secretValue = val
+			}
+			redactPluginSecretNode(val)
 		}
-		return nil, fmt.Errorf("%s", message)
-	}
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		message := extractAPIMessage(body)
-		if message == "" {
-			message = fmt.Sprintf("server returned status %d", resp.StatusCode)
+		if keyValue != nil && secretValue != nil && pluginSecretEnvKey(keyValue.Value) {
+			secretValue.Value = ""
+			secretValue.Tag = "!!str"
 		}
-		return nil, fmt.Errorf("%s", message)
 	}
+}
 
-	if len(body) == 0 {
-		return nil, fmt.Errorf("server returned empty response")
+func pluginSecretEnvKey(key string) bool {
+	upper := strings.ToUpper(key)
+	for _, part := range []string{"PASSWORD", "SECRET", "HASH", "TOKEN", "PRIVATE"} {
+		if strings.Contains(upper, part) {
+			return true
+		}
 	}
-
-	var response PluginOperationResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to decode server response: %w (body: %s)", err, strings.TrimSpace(string(body)))
-	}
-
-	return &response, nil
+	return false
 }

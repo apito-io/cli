@@ -22,15 +22,14 @@ var pluginBuildCmd = &cobra.Command{
 	Long:  `Build a plugin automatically based on its language configuration in config.yml`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check for --dir flag first, then positional argument, then default to current dir
-		pluginDir, _ := cmd.Flags().GetString("dir")
-		if pluginDir == "" && len(args) > 0 {
-			pluginDir = args[0]
+		name := ""
+		if len(args) > 0 {
+			name = args[0]
 		}
-		if pluginDir == "" {
-			pluginDir = "."
+		if err := runPluginBuild(cmd, name); err != nil {
+			print_error(err.Error())
+			os.Exit(1)
 		}
-		buildPlugin(pluginDir, cmd)
 	},
 }
 
@@ -149,6 +148,14 @@ func buildPlugin(pluginDir string, cmd *cobra.Command) {
 	}
 
 	print_status(fmt.Sprintf("Detected language: %s", runtime.Name))
+
+	if language == "go" {
+		print_status("Running: go vet ./...")
+		if err := executeCommand("go vet ./...", pluginDir); err != nil {
+			print_error("go vet failed: " + err.Error())
+			return
+		}
+	}
 
 	// Validate required files
 	if !validateRequiredFiles(pluginDir, runtime.RequiredFiles) {
@@ -383,30 +390,60 @@ func selectTargetPlatform(cmd *cobra.Command) PlatformTarget {
 		}
 	}
 
-	// If no flags or validation failed, use interactive prompt
+	// Host platform is the first row and the default cursor.
+	platforms := orderedPlatforms()
 	var items []string
-	for _, platform := range supportedPlatforms {
+	for _, platform := range platforms {
 		items = append(items, platform.Display)
 	}
 
 	prompt := promptui.Select{
-		Label: "Choose target platform",
-		Items: items,
+		Label:     "Choose target platform",
+		Items:     items,
+		CursorPos: 0,
+		Size:      len(items),
 	}
 
 	idx, _, err := prompt.Run()
 	if err != nil {
 		print_error("Platform selection failed: " + err.Error())
-		// Return host platform as fallback
-		return PlatformTarget{
+		return platforms[0]
+	}
+
+	return platforms[idx]
+}
+
+// orderedPlatforms puts the current machine first. The rest keep their catalog order.
+func orderedPlatforms() []PlatformTarget {
+	var named []PlatformTarget
+	for _, platform := range supportedPlatforms {
+		if strings.HasPrefix(platform.Display, "Host OS") {
+			continue
+		}
+		named = append(named, platform)
+	}
+	hostIdx := -1
+	for i, platform := range named {
+		if platform.OS == runtime.GOOS && platform.Arch == runtime.GOARCH {
+			hostIdx = i
+			break
+		}
+	}
+	if hostIdx < 0 {
+		host := PlatformTarget{
 			OS:       runtime.GOOS,
 			Arch:     runtime.GOARCH,
 			Display:  fmt.Sprintf("Host OS (%s/%s)", runtime.GOOS, runtime.GOARCH),
 			Platform: "",
 		}
+		return append([]PlatformTarget{host}, named...)
 	}
-
-	return supportedPlatforms[idx]
+	host := named[hostIdx]
+	out := make([]PlatformTarget, 0, len(named))
+	out = append(out, host)
+	out = append(out, named[:hostIdx]...)
+	out = append(out, named[hostIdx+1:]...)
+	return out
 }
 
 func determineGoBuildType(cmd *cobra.Command, systemAvailable bool) GoBuildType {
@@ -685,10 +722,10 @@ func getBinaryPath(pluginDir, binaryName string) string {
 }
 
 func showNextSteps(pluginID string) {
-	print_step("🚀 Next Steps")
-	print_status("1. Test your plugin locally (if applicable)")
-	print_status("2. Deploy to server: apito plugin deploy")
-	print_status(fmt.Sprintf("3. Check status: apito plugin status %s", pluginID))
+	print_step("Next steps")
+	print_status("1. apito plugin check")
+	print_status("2. apito plugin push -m \"what changed\"")
+	_ = pluginID
 }
 
 // Build environment information
@@ -717,32 +754,11 @@ func showBuildEnvironment() {
 	print_status(fmt.Sprintf("Architecture: %s", runtime.GOARCH))
 }
 
-var pluginEnvCmd = &cobra.Command{
-	Use:   "env",
-	Short: "Show build environment information",
-	Long:  `Show available language runtimes and build tools`,
-	Run: func(cmd *cobra.Command, args []string) {
-		showBuildEnvironment()
-	},
-}
-
 func init() {
-	// Add --dir flag to build command
-	pluginBuildCmd.Flags().StringP("dir", "d", "", "Plugin directory (alternative to positional argument)")
-
-	// Add build method flag
 	pluginBuildCmd.Flags().StringP("build", "b", "", "Build method: system or docker (skips interactive prompt)")
-
-	// Add platform flags
 	pluginBuildCmd.Flags().StringP("platform", "p", "", "Target OS: linux, darwin, or windows (skips interactive prompt)")
 	pluginBuildCmd.Flags().String("arch", "", "Target architecture: amd64 or arm64 (skips interactive prompt)")
-
-	// Add build type flag (for Go plugins)
 	pluginBuildCmd.Flags().StringP("type", "t", "", "Go build type: debug, develop, or production (skips interactive prompt)")
-
-	// Add build command to plugin commands
-	pluginCmd.AddCommand(pluginBuildCmd)
-	pluginCmd.AddCommand(pluginEnvCmd)
 }
 
 // UI Build Functions
