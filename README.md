@@ -4,7 +4,7 @@ One Apache-licensed binary for a local engine and Apito Cloud. Cloud-only comman
 
 `apito login` asks the local engine at `http://localhost:5055` for a code, then opens the console at `http://localhost:4055/cli`. Cloud uses `https://api.apito.io` and opens the console URL that server returns. Custom asks for the server URL and an `apt_` token. The token is stored outside `config.yml`. Project keys (`ak_`) are separate and are shown once at creation.
 
-`apito mcp connect` uses the same Local, Cloud, or Custom choice and opens `/mcp`. It stores a separate read-only MCP token. `apito mcp serve` stays a foreground process for Cursor or Claude and does not put that token in the generated client config.
+`apito mcp connect` uses the same Local, Cloud, or Custom choice and opens `/mcp`. It stores a separate read-only MCP token and writes a client config that points at the engine's HTTP MCP endpoint (`<server>/mcp`). The config never contains a token. The engine serves MCP; the CLI does not run an MCP server.
 
 ```text
 apito login [name]
@@ -12,9 +12,7 @@ apito account list|select|test|remove
 apito project list|open
 apito key project list|create|revoke
 apito mcp connect [name]
-apito mcp update
 apito mcp config --client cursor|claude
-apito mcp serve
 apito gen --language typescript|go --framework astro|react|none
 apito tenant list|create
 apito client invite|status

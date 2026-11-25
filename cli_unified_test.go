@@ -197,12 +197,10 @@ func TestLoginAndMCPConnectKeepSeparateTokens(t *testing.T) {
 		opened = page
 		return nil
 	}
-	installMCPRuntime = func(bool) error { return nil }
 	t.Cleanup(func() {
 		localLoginServer = previous
 		loginKind = ""
 		loginOpen = openBrowser
-		installMCPRuntime = defaultInstallMCPRuntime
 	})
 	if err := runMCPConnect(nil, []string{"lab"}); err != nil {
 		t.Fatal(err)
@@ -282,12 +280,10 @@ func TestMCPConnectCustomDoesNotAskForToken(t *testing.T) {
 	loginRead = func(prompt string) (string, error) {
 		return "", fmt.Errorf("custom MCP asked for %s", prompt)
 	}
-	installMCPRuntime = func(bool) error { return nil }
 	t.Cleanup(func() {
 		loginKind, loginServer = "", ""
 		loginOpen = openBrowser
 		loginRead = readSecretLine
-		installMCPRuntime = defaultInstallMCPRuntime
 	})
 	if err := runMCPConnect(nil, []string{"enterprise"}); err != nil {
 		t.Fatal(err)
@@ -821,59 +817,12 @@ func TestGenArtifactModeAndGoModule(t *testing.T) {
 	}
 }
 
-func TestMCPServeUsesCapabilityEdition(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	t.Setenv("APITO_MCP_COMMAND", "")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/system/health":
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-		case "/system/cli/v1/capabilities":
-			_, _ = w.Write([]byte(`{"capabilities":{"mcp":true,"tenant_catalog":true,"project_access":true}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("APITO_CREDENTIAL_STORE", "file")
-	acc := AccountConfig{
-		ServerURL:           srv.URL,
-		MCPProjectGrantMode: "selected",
-		MCPProjectIDs:       []string{"project-1", "project-2"},
-		MCPTenantGrantMode:  "none",
-	}
-	acc.SetToken("apt_cli_not_for_mcp")
-	acc.MCPAccessToken = "apt_mcp"
-	if err := saveCLIConfig(&CLIConfig{DefaultAccount: "lab", Accounts: map[string]AccountConfig{"lab": acc}}); err != nil {
-		t.Fatal(err)
-	}
-	flagAccount = "lab"
-	flagProject = "project-1"
-	mcpTransport = "node"
-	called := false
-	mcpRun = func(string, []string, []string) error {
-		called = true
-		return nil
-	}
-	t.Cleanup(func() {
-		flagAccount, flagProject = "", ""
-		mcpTransport = ""
-		mcpCommand = defaultMCPCommand
-		mcpRun = defaultMCPRun
-	})
+func TestMCPServeRemovedPointsToHTTPConfig(t *testing.T) {
 	err := mcpServeCmd.RunE(mcpServeCmd, nil)
-	if err == nil || !strings.Contains(err.Error(), "does not start a separate MCP server") || called {
-		t.Fatalf("serve err=%v called=%v", err, called)
+	if err == nil {
+		t.Fatal("apito mcp serve should fail now that the engine serves MCP over HTTP")
 	}
-	flagProject = ""
-	if err := mcpServeCmd.RunE(mcpServeCmd, nil); err == nil || !strings.Contains(err.Error(), "--project") {
-		t.Fatalf("missing project: %v", err)
-	}
-	flagProject = "other"
-	if err := mcpServeCmd.RunE(mcpServeCmd, nil); err == nil || !strings.Contains(err.Error(), "outside this MCP grant") {
-		t.Fatalf("outside grant: %v", err)
+	if !strings.Contains(err.Error(), "apito mcp connect") || !strings.Contains(err.Error(), "/mcp") {
+		t.Fatalf("error should point at the HTTP endpoint and apito mcp connect: %v", err)
 	}
 }

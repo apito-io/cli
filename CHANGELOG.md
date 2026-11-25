@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.10
+
+- Removed `apito mcp serve` and the bundled Node MCP runtime. The engine serves MCP over HTTP at `<server>/mcp`; `apito mcp connect` and `apito mcp config` write a URL-only client config. Old configs that still launch `serve` get a message pointing at `apito mcp connect`. This also removes the stdio bridge that only understood `Content-Length` framing (MCP bug 20).
+
 ## v0.5.7
 
 - `apito mcp serve` bridges stdio to the engine HTTP MCP endpoint. It does not start a separate `apito-mcp` server.
